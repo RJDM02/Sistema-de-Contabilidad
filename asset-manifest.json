@@ -1,17 +1,17 @@
 {
   "files": {
     "main.css": "/Sistema-de-Contabilidad/static/css/main.f8293465.css",
-    "main.js": "/Sistema-de-Contabilidad/static/js/main.ed1e795e.js",
+    "main.js": "/Sistema-de-Contabilidad/static/js/main.21d3b5f4.js",
     "static/js/453.69f96cfb.chunk.js": "/Sistema-de-Contabilidad/static/js/453.69f96cfb.chunk.js",
     "static/media/bootstrap-icons.woff?": "/Sistema-de-Contabilidad/static/media/bootstrap-icons.39795c0b4513de014cf8.woff",
     "static/media/bootstrap-icons.woff2?": "/Sistema-de-Contabilidad/static/media/bootstrap-icons.b7bcc075b395c14ce8c2.woff2",
     "index.html": "/Sistema-de-Contabilidad/index.html",
     "main.f8293465.css.map": "/Sistema-de-Contabilidad/static/css/main.f8293465.css.map",
-    "main.ed1e795e.js.map": "/Sistema-de-Contabilidad/static/js/main.ed1e795e.js.map",
+    "main.21d3b5f4.js.map": "/Sistema-de-Contabilidad/static/js/main.21d3b5f4.js.map",
     "453.69f96cfb.chunk.js.map": "/Sistema-de-Contabilidad/static/js/453.69f96cfb.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.f8293465.css",
-    "static/js/main.ed1e795e.js"
+    "static/js/main.21d3b5f4.js"
   ]
 }
