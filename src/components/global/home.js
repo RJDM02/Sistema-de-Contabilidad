@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 
-
 const Home = () => {
   const [firstName, setFirstName] = useState("");
   const [rol, setRol] = useState("");
@@ -15,7 +14,13 @@ const Home = () => {
     cantidadDocumentos: 0,
     cantidadClientes: 0
   });
-  
+  const [resumenSuperAdmin, setResumenSuperAdmin] = useState({
+    totalEstimadoMes: 0,
+    totalRealMes: 0,
+    pagadoMes: 0,
+    deudaMes: 0
+  });
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Buenos días";
@@ -45,6 +50,83 @@ const Home = () => {
     ];
     return meses[new Date().getMonth()];
   };
+
+  const cargarDatosSuperAdmin = useCallback(async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem("auth");
+      const mesActual = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+      ][new Date().getMonth()];
+      
+      // Obtener cobros estimados del mes actual
+      const estimadosResponse = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      // Obtener cobros reales del mes actual
+      const realesResponse = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro/", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      // Calcular total estimado del mes
+      let totalEstimado = 0;
+      estimadosResponse.data.forEach(estimado => {
+        if (estimado.mes && estimado.mes.toLowerCase() === mesActual) {
+          totalEstimado += (estimado.bill || 0) + (estimado.notas || 0) + 
+                          (estimado.subir_notas || 0) + (estimado.open || 0) + 
+                          (estimado.spr || 0);
+        }
+      });
+      
+      // Calcular total real, pagado y deuda del mes
+      let totalReal = 0;
+      let pagado = 0;
+      let deuda = 0;
+      
+      realesResponse.data.forEach(cobro => {
+        if (cobro.mes && cobro.mes.toLowerCase() === mesActual) {
+          let unidades = 0;
+          
+          if (cobro.contenido?.length > 0) {
+            unidades += cobro.contenido.reduce((sum, r) => sum + (r.unidades || 0), 0);
+          }
+          if (cobro.contenido_open?.length > 0) {
+            unidades += cobro.contenido_open.reduce((sum, r) => sum + (r.unidades || 0), 0);
+          }
+          if (cobro.contenido_spr?.length > 0) {
+            unidades += cobro.contenido_spr.reduce((sum, r) => sum + (r.unidades || 0), 0);
+          }
+          if (unidades === 0 && cobro.unidades) {
+            unidades = cobro.unidades;
+          }
+          
+          const monto = unidades * 1;
+          totalReal += monto;
+          
+          if (cobro.pagado) {
+            pagado += monto;
+          } else {
+            deuda += monto;
+          }
+        }
+      });
+      
+      setResumenSuperAdmin({
+        totalEstimadoMes: totalEstimado.toFixed(2),
+        totalRealMes: totalReal.toFixed(2),
+        pagadoMes: pagado.toFixed(2),
+        deudaMes: deuda.toFixed(2)
+      });
+      
+    } catch (error) {
+      console.error("Error al cargar datos para SuperAdmin", error);
+      setError("No se pudieron cargar los datos financieros. Por favor, intente nuevamente más tarde.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const cargarDatosCobros = useCallback(async (userId) => {
     if (!userId) return;
@@ -124,10 +206,12 @@ const Home = () => {
     setFirstName(savedFirstName);
     setRol(savedRol);
     
-    if (savedRol !== "SuperAdmin") {
+    if (savedRol === "SuperAdmin") {
+      cargarDatosSuperAdmin();
+    } else if (savedRol !== "SuperAdmin") {
       cargarDatosCobros(savedUserId);
     }
-  }, [cargarDatosCobros]);
+  }, [cargarDatosCobros, cargarDatosSuperAdmin]);
 
   const saludo = getGreeting();
   const descripcionRol = getRolDescripcion(rol);
@@ -156,109 +240,105 @@ const Home = () => {
         </div>
       </div>
 
-      {rol !== "SuperAdmin" ? (
-        loading ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Cargando...</span>
-            </div>
-            <p className="mt-3">Cargando su información...</p>
+      {loading ? (
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Cargando...</span>
           </div>
-        ) : error ? (
-          <div className="alert alert-danger">
-            <i className="bi bi-exclamation-triangle-fill me-2"></i>
-            {error}
-          </div>
-        ) : (
-          <>
-            <div className="row g-4 mb-4">
-              <div className="col-md-6 col-lg-3">
-                <div className="card shadow h-100">
-                  <div className="card-header bg-primary text-white">
-                    <h5 className="card-title mb-0">Total de Unidades</h5>
+          <p className="mt-3">Cargando su información...</p>
+        </div>
+      ) : error ? (
+        <div className="alert alert-danger">
+          <i className="bi bi-exclamation-triangle-fill me-2"></i>
+          {error}
+        </div>
+      ) : rol === "SuperAdmin" ? (
+        <div className="row g-4">
+          <div className="col-12">
+            <div className="card shadow">
+              <div className="card-header bg-dark text-white">
+                <h5 className="card-title mb-0">Resumen Financiero - {mesActual}</h5>
+              </div>
+              <div className="card-body">
+                <div className="row">
+                  <div className="col-md-6 col-lg-3 mb-4">
+                    <div className="card h-100 border-primary">
+                      <div className="card-body text-center">
+                        <h6 className="text-primary">Total Estimado</h6>
+                        <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.totalEstimadoMes)}</h3>
+                        <p className="text-muted small">Valor estimado a cobrar</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="card-body text-center">
-                    <h2 className="display-5 fw-bold text-primary mb-0">{formatNumber(resumenCobros.totalUnidades)}</h2>
-                    <p className="text-muted">Unidades registradas</p>
+                  
+                  <div className="col-md-6 col-lg-3 mb-4">
+                    <div className="card h-100 border-info">
+                      <div className="card-body text-center">
+                        <h6 className="text-info">Total Cobrado</h6>
+                        <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.totalRealMes)}</h3>
+                        <p className="text-muted small">Valor real cobrado</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="col-md-6 col-lg-3 mb-4">
+                    <div className="card h-100 border-success">
+                      <div className="card-body text-center">
+                        <h6 className="text-success">Pagado</h6>
+                        <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.pagadoMes)}</h3>
+                        <p className="text-muted small">Monto recibido</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="col-md-6 col-lg-3 mb-4">
+                    <div className="card h-100 border-danger">
+                      <div className="card-body text-center">
+                        <h6 className="text-danger">Deuda Pendiente</h6>
+                        <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.deudaMes)}</h3>
+                        <p className="text-muted small">Por cobrar</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="col-md-6 col-lg-3">
-                <div className="card shadow h-100">
-                  <div className="card-header bg-success text-white">
-                    <h5 className="card-title mb-0">Total a Cobrar</h5>
-                  </div>
-                  <div className="card-body text-center">
-                    <h2 className="display-5 fw-bold text-success mb-0">${formatNumber(resumenCobros.totalCobrar)}</h2>
-                    <p className="text-muted">Valor a cobrar</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="col-md-6 col-lg-3">
-                <div className="card shadow h-100">
-                  <div className="card-header bg-info text-white">
-                    <h5 className="card-title mb-0">Clientes</h5>
-                  </div>
-                  <div className="card-body text-center">
-                    <h2 className="display-5 fw-bold text-info mb-0">{resumenCobros.cantidadClientes}</h2>
-                    <p className="text-muted">Clientes activos</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="col-md-6 col-lg-3">
-                <div className="card shadow h-100">
-                  <div className="card-header bg-warning text-dark">
-                    <h5 className="card-title mb-0">Documentos</h5>
-                  </div>
-                  <div className="card-body text-center">
-                    <h2 className="display-5 fw-bold text-warning mb-0">{resumenCobros.cantidadDocumentos}</h2>
-                    <p className="text-muted">Tipos de documentos</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="row g-4 mb-4">
-              <div className="col-12">
-                <div className="card shadow">
-                  <div className="card-header bg-dark text-white">
-                    <h5 className="card-title mb-0">Resumen de {mesActual}</h5>
-                  </div>
-                  <div className="card-body p-4">
-                    <div className="row align-items-center">
-                      <div className="col-md-6 text-center">
-                        <div className="p-4 bg-light rounded border">
-                          <h6 className="text-primary mb-3">Unidades Registradas</h6>
-                          <h2 className="display-6 fw-bold mb-3">{formatNumber(resumenCobros.unidadesMesActual)}</h2>
-                          <div className="progress mb-2" style={{height: "10px"}}>
+                
+                <div className="mt-4">
+                  <div className="card">
+                    <div className="card-header bg-light">
+                      <h6 className="mb-0">Resumen Comparativo</h6>
+                    </div>
+                    <div className="card-body">
+                      <div className="row">
+                        <div className="col-md-6">
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>Estimado vs Real:</span>
+                            <strong className={parseFloat(resumenSuperAdmin.totalRealMes) >= parseFloat(resumenSuperAdmin.totalEstimadoMes) ? "text-success" : "text-danger"}>
+                              {((parseFloat(resumenSuperAdmin.totalRealMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100).toFixed(2))}%
+                            </strong>
+                          </div>
+                          <div className="progress mb-4" style={{height: "10px"}}>
                             <div 
                               className="progress-bar bg-primary" 
                               role="progressbar" 
-                              style={{width: `${Math.min(100, (resumenCobros.unidadesMesActual / (resumenCobros.totalUnidades || 1)) * 100)}%`}} 
+                              style={{width: `${Math.min(100, (parseFloat(resumenSuperAdmin.totalRealMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100))}%`}} 
                             />
                           </div>
-                          <p className="text-muted mb-0">
-                            {Math.round((resumenCobros.unidadesMesActual / (resumenCobros.totalUnidades || 1)) * 100)}% del total
-                          </p>
                         </div>
-                      </div>
-                      <div className="col-md-6 text-center mt-4 mt-md-0">
-                        <div className="p-4 bg-light rounded border">
-                          <h6 className="text-success mb-3">Valor a Cobrar</h6>
-                          <h2 className="display-6 fw-bold mb-3">${formatNumber(resumenCobros.valorMesActual)}</h2>
-                          <div className="progress mb-2" style={{height: "10px"}}>
+                        
+                        <div className="col-md-6">
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>Porcentaje de cobranza:</span>
+                            <strong className={parseFloat(resumenSuperAdmin.pagadoMes) >= parseFloat(resumenSuperAdmin.totalRealMes) * 0.8 ? "text-success" : "text-warning"}>
+                              {((parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalRealMes) || 1) * 100).toFixed(2))}%
+                            </strong>
+                          </div>
+                          <div className="progress mb-4" style={{height: "10px"}}>
                             <div 
                               className="progress-bar bg-success" 
                               role="progressbar" 
-                              style={{width: `${Math.min(100, (resumenCobros.valorMesActual / (resumenCobros.totalCobrar || 1)) * 100)}%`}} 
+                              style={{width: `${Math.min(100, (parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalRealMes) || 1) * 100))}%`}} 
                             />
                           </div>
-                          <p className="text-muted mb-0">
-                            {Math.round((resumenCobros.valorMesActual / (resumenCobros.totalCobrar || 1)) * 100)}% del total
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -266,24 +346,106 @@ const Home = () => {
                 </div>
               </div>
             </div>
-          </>
-        )
+          </div>
+        </div>
       ) : (
-        <div className="row g-4">
-          <div className="col-12">
-            <div className="card shadow">
-              <div className="card-header bg-dark text-white">
-                <h5 className="card-title mb-0">Panel de Administración</h5>
+        <>
+          <div className="row g-4 mb-4">
+            <div className="col-md-6 col-lg-3">
+              <div className="card shadow h-100">
+                <div className="card-header bg-primary text-white">
+                  <h5 className="card-title mb-0">Total de Unidades</h5>
+                </div>
+                <div className="card-body text-center">
+                  <h2 className="display-5 fw-bold text-primary mb-0">{formatNumber(resumenCobros.totalUnidades)}</h2>
+                  <p className="text-muted">Unidades registradas</p>
+                </div>
               </div>
-              <div className="card-body">
-                <p className="lead">
-                  Como administrador del sistema, usted tiene acceso a todas las funciones de gestión.
-                  Use el menú de navegación para acceder a las diferentes secciones del sistema.
-                </p>
+            </div>
+
+            <div className="col-md-6 col-lg-3">
+              <div className="card shadow h-100">
+                <div className="card-header bg-success text-white">
+                  <h5 className="card-title mb-0">Total a Cobrar</h5>
+                </div>
+                <div className="card-body text-center">
+                  <h2 className="display-5 fw-bold text-success mb-0">${formatNumber(resumenCobros.totalCobrar)}</h2>
+                  <p className="text-muted">Valor a cobrar</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-md-6 col-lg-3">
+              <div className="card shadow h-100">
+                <div className="card-header bg-info text-white">
+                  <h5 className="card-title mb-0">Clientes</h5>
+                </div>
+                <div className="card-body text-center">
+                  <h2 className="display-5 fw-bold text-info mb-0">{resumenCobros.cantidadClientes}</h2>
+                  <p className="text-muted">Clientes activos</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-md-6 col-lg-3">
+              <div className="card shadow h-100">
+                <div className="card-header bg-warning text-dark">
+                  <h5 className="card-title mb-0">Documentos</h5>
+                </div>
+                <div className="card-body text-center">
+                  <h2 className="display-5 fw-bold text-warning mb-0">{resumenCobros.cantidadDocumentos}</h2>
+                  <p className="text-muted">Tipos de documentos</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          <div className="row g-4 mb-4">
+            <div className="col-12">
+              <div className="card shadow">
+                <div className="card-header bg-dark text-white">
+                  <h5 className="card-title mb-0">Resumen de {mesActual}</h5>
+                </div>
+                <div className="card-body p-4">
+                  <div className="row align-items-center">
+                    <div className="col-md-6 text-center">
+                      <div className="p-4 bg-light rounded border">
+                        <h6 className="text-primary mb-3">Unidades Registradas</h6>
+                        <h2 className="display-6 fw-bold mb-3">{formatNumber(resumenCobros.unidadesMesActual)}</h2>
+                        <div className="progress mb-2" style={{height: "10px"}}>
+                          <div 
+                            className="progress-bar bg-primary" 
+                            role="progressbar" 
+                            style={{width: `${Math.min(100, (resumenCobros.unidadesMesActual / (resumenCobros.totalUnidades || 1)) * 100)}%`}} 
+                          />
+                        </div>
+                        <p className="text-muted mb-0">
+                          {Math.round((resumenCobros.unidadesMesActual / (resumenCobros.totalUnidades || 1)) * 100)}% del total
+                        </p>
+                      </div>
+                    </div>
+                    <div className="col-md-6 text-center mt-4 mt-md-0">
+                      <div className="p-4 bg-light rounded border">
+                        <h6 className="text-success mb-3">Valor a Cobrar</h6>
+                        <h2 className="display-6 fw-bold mb-3">${formatNumber(resumenCobros.valorMesActual)}</h2>
+                        <div className="progress mb-2" style={{height: "10px"}}>
+                          <div 
+                            className="progress-bar bg-success" 
+                            role="progressbar" 
+                            style={{width: `${Math.min(100, (resumenCobros.valorMesActual / (resumenCobros.totalCobrar || 1)) * 100)}%`}} 
+                          />
+                        </div>
+                        <p className="text-muted mb-0">
+                          {Math.round((resumenCobros.valorMesActual / (resumenCobros.totalCobrar || 1)) * 100)}% del total
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
