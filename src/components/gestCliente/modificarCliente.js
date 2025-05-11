@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const ModificarCliente = () => {
   const { id } = useParams();
@@ -8,12 +10,15 @@ const ModificarCliente = () => {
 
   const [formData, setFormData] = useState({
     nombre: "",
-    categoria: ""
+    categoria: "",
+    agencia: [] // Cambiado a array para múltiples selecciones
   });
   
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [agencias, setAgencias] = useState([]);
+  const [loadingAgencias, setLoadingAgencias] = useState(true);
 
   // Opciones para el select de categoría
   const categorias = [
@@ -21,31 +26,45 @@ const ModificarCliente = () => {
     { value: "2", label: "TCM" }
   ];
 
-  // Cargar datos del cliente al montar el componente
+  // Cargar datos del cliente y agencias al montar el componente
   useEffect(() => {
-    const fetchCliente = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
         const token = localStorage.getItem("auth");
         
-        const response = await axios.get(`http://localhost:8000/api/detail_client/${id}/`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        // Cargar agencias
+        const agenciasResponse = await axios.get(
+          "https://sistemacontable-wico.onrender.com/api/listar_agencia/",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setAgencias(agenciasResponse.data);
+        
+        // Cargar datos del cliente
+        const clienteResponse = await axios.get(
+          `https://sistemacontable-wico.onrender.com/api/detail_client/${id}/`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
 
+        // Convertir array de objetos agencia a array de IDs
+        const agenciaIds = clienteResponse.data.agencia?.map(ag => ag.id) || [];
+        
         setFormData({
-          nombre: response.data.nombre,
-          categoria: String(response.data.categoria) // Convertimos a string para el select
+          nombre: clienteResponse.data.nombre,
+          categoria: String(clienteResponse.data.categoria),
+          agencia: agenciaIds
         });
       } catch (error) {
-        setError("Error al cargar los datos del cliente");
+        setError("Error al cargar los datos");
         console.error(error);
       } finally {
         setLoading(false);
+        setLoadingAgencias(false);
       }
     };
 
-    fetchCliente();
+    fetchData();
   }, [id]);
 
   const handleChange = (e) => {
@@ -53,6 +72,21 @@ const ModificarCliente = () => {
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+  };
+
+  // Manejador específico para el select múltiple de agencias
+  const handleAgenciaChange = (e) => {
+    const options = e.target.options;
+    const selectedValues = [];
+    for (let i = 0; i < options.length; i++) {
+      if (options[i].selected) {
+        selectedValues.push(parseInt(options[i].value));
+      }
+    }
+    setFormData(prev => ({
+      ...prev,
+      agencia: selectedValues
     }));
   };
 
@@ -65,10 +99,11 @@ const ModificarCliente = () => {
       const token = localStorage.getItem("auth");
 
       await axios.put(
-        `http://localhost:8000/api/update_client/${id}/`,
+        `https://sistemacontable-wico.onrender.com/api/update_client/${id}/`,
         {
           nombre: formData.nombre,
-          categoria: parseInt(formData.categoria) // Convertimos a número para el backend
+          categoria: parseInt(formData.categoria),
+          agencia: formData.agencia // Ahora es un array de IDs
         },
         {
           headers: {
@@ -78,6 +113,7 @@ const ModificarCliente = () => {
         }
       );
 
+      toast.success("Cliente actualizado exitosamente");
       setSuccess(true);
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 
@@ -85,6 +121,7 @@ const ModificarCliente = () => {
                          Object.values(error.response?.data || {}).join("\n") ||
                          "Error al actualizar el cliente";
       setError(errorMessage);
+      toast.error(errorMessage);
       console.error("Error completo:", error.response || error);
     } finally {
       setLoading(false);
@@ -95,10 +132,24 @@ const ModificarCliente = () => {
     navigate("/gestCliente/listarClientes");
   };
 
-  if (loading && !formData.nombre) return <div className="text-center mt-4">Cargando...</div>;
+  if ((loading && !formData.nombre) || loadingAgencias) {
+    return <div className="text-center mt-4">Cargando...</div>;
+  }
 
   return (
     <div className="container mt-4">
+      <ToastContainer 
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
+      
       <h2>Modificar Cliente</h2>
       
       {success ? (
@@ -148,6 +199,30 @@ const ModificarCliente = () => {
               </select>
             </div>
             
+            <div className="mb-3">
+              <label className="form-label"><strong>Agencia(s)*:</strong></label>
+              <select
+                className="form-select"
+                name="agencia"
+                multiple
+                size="5"
+                value={formData.agencia}
+                onChange={handleAgenciaChange}
+                required={formData.agencia.length === 0}
+                disabled={loading || loadingAgencias}
+              >
+                {agencias.map((agencia) => (
+                  <option key={agencia.id} value={agencia.id}>
+                    {agencia.nombre}
+                  </option>
+                ))}
+              </select>
+              <small className="text-muted">Mantén presionado Ctrl (Windows) o Command (Mac) para seleccionar múltiples opciones</small>
+              <div className="mt-1">
+                <small className="text-muted">Seleccionadas: {formData.agencia.length} agencia(s)</small>
+              </div>
+            </div>
+            
             <div className="d-flex justify-content-between">
               <button 
                 type="button" 
@@ -161,7 +236,7 @@ const ModificarCliente = () => {
               <button 
                 type="submit" 
                 className="btn btn-primary"
-                disabled={loading || !formData.nombre || !formData.categoria}
+                disabled={loading || !formData.nombre || !formData.categoria || formData.agencia.length === 0}
               >
                 {loading ? (
                   <>

@@ -21,7 +21,7 @@ const ListarDocumentacion = () => {
         setLoading(true);
         setError(null);
         const token = localStorage.getItem("auth");
-        const response = await axios.get("http://localhost:8000/api/listar_documentacion/", {
+        const response = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_documentacion/", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -71,6 +71,10 @@ const ListarDocumentacion = () => {
     navigate("/gestDocumentacion/insertarDocumentacion");
   };
 
+  const handleModificarDocumento = (id) => {
+    navigate(`/gestDocumentacion/modificarDocumentacion/${id}`);
+  };
+
   const handleShowDeleteModal = (id) => {
     setDocumentoToDelete(id);
     setShowDeleteModal(true);
@@ -89,7 +93,7 @@ const ListarDocumentacion = () => {
       const token = localStorage.getItem("auth");
 
       await axios.delete(
-        `http://localhost:8000/api/eliminar_documentacion/${documentoToDelete}/`,
+        `https://sistemacontable-wico.onrender.com/api/eliminar_documentacion/${documentoToDelete}/`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -185,6 +189,12 @@ const ListarDocumentacion = () => {
                   <td>
                     <div className="d-flex gap-2">
                       <button
+                        onClick={() => handleModificarDocumento(documento.id)}
+                        className="btn btn-sm btn-warning"
+                      >
+                        Modificar
+                      </button>
+                      <button
                         onClick={() => handleShowDeleteModal(documento.id)}
                         className="btn btn-sm btn-danger"
                         disabled={updating === documento.id}
@@ -227,7 +237,7 @@ const ListarDocumentacion = () => {
 
       {/* Contenedor de notificaciones Toast */}
       <ToastContainer 
-        position="top-right"
+        position="top-left"
         autoClose={3000}
         hideProgressBar={false}
         newestOnTop={false}
@@ -236,6 +246,7 @@ const ListarDocumentacion = () => {
         pauseOnFocusLoss
         draggable
         pauseOnHover
+        limit={1}
       />
     </div>
   );

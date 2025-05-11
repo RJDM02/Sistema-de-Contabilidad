@@ -1,15 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+
 
 const Home = () => {
-  const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
   const [rol, setRol] = useState("");
-  const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
-  // Datos para el dashboard
   const [resumenCobros, setResumenCobros] = useState({
     totalUnidades: 0,
     totalCobrar: 0,
@@ -19,8 +16,6 @@ const Home = () => {
     cantidadClientes: 0
   });
   
-  const navigate = useNavigate();
-
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Buenos días";
@@ -29,107 +24,81 @@ const Home = () => {
   };
 
   const getRolDescripcion = (rol) => {
-    if (rol === "SuperAdmin" || rol === "Admin") {
-      return "Administrador";
-    } else if (
-      rol === "user_User" ||
-      rol === "user_Supervisor" ||
-      rol === "user_Supervisado"
-    ) {
-      return rol === "user_Supervisor" ? "Supervisor" : "Usuario";
-    } else {
-      return "Invitado";
-    }
+    const roles = {
+      "SuperAdmin": "Administrador",
+      "Admin": "Administrador",
+      "user_Supervisor": "Supervisor",
+      "user_User": "Usuario",
+      "user_Supervisado": "Usuario"
+    };
+    return roles[rol] || "Invitado";
   };
 
-  // Formato de número para mostrar con separadores de miles
   const formatNumber = (num) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
-  // Obtener mes actual en formato texto
   const getMesActual = () => {
     const meses = [
       "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
       "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
     ];
-    const fecha = new Date();
-    return meses[fecha.getMonth()];
+    return meses[new Date().getMonth()];
   };
 
-  // Cargar datos de usuario y dashboard
-  useEffect(() => {
-    const savedUsername = localStorage.getItem("username") || "Usuario";
-    const savedRol = localStorage.getItem("role") || "Invitado";
-    const savedUserId = localStorage.getItem("userID");
-    
-    setUsername(savedUsername);
-    setRol(savedRol);
-    setUserId(savedUserId);
-    
-    // Si no es SuperAdmin, cargar datos de cobros
-    if (savedRol !== "SuperAdmin") {
-      cargarDatosCobros(savedUserId);
-    }
-  }, []);
-
-  // Función para cargar datos de cobros para el dashboard
-  const cargarDatosCobros = async (userId) => {
+  const cargarDatosCobros = useCallback(async (userId) => {
     if (!userId) return;
     
     try {
       setLoading(true);
       const token = localStorage.getItem("auth");
-      
-      // 1. Obtener cobros del usuario en sesión
-      const response = await axios.get("http://localhost:8000/api/listar_cobro_usuario_en_sesion/", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro_usuario_en_sesion/", {
+        headers: { Authorization: `Bearer ${token}` },
       });
       
-      // Calcular totales
       let totalUnidades = 0;
       let totalCobrar = 0;
       let unidadesMesActual = 0;
       let valorMesActual = 0;
       const clientesUnicos = new Set();
       const documentosUnicos = new Set();
-      const mesActual = new Date().getMonth();
-      const factor = rol === "user_Supervisor" ? 0.40 : 0.20;
+      
+      const meses = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+      ];
+      const nombreMesActual = meses[new Date().getMonth()];
+      const factor = rol === "user_Supervisado" ? 0.20 : 0.40;
       
       response.data.forEach(cobro => {
-        // Agregar cliente y documento a conjuntos
-        if (cobro.cliente?.nombre) {
-          clientesUnicos.add(cobro.cliente.nombre);
-        }
-        if (cobro.documento?.nombre_documento) {
-          documentosUnicos.add(cobro.documento.nombre_documento);
-        }
+        if (cobro.cliente?.nombre) clientesUnicos.add(cobro.cliente.nombre);
+        if (cobro.documento?.nombre_documento) documentosUnicos.add(cobro.documento.nombre_documento);
         
-        // Obtener mes del cobro (si hay fecha)
-        const fechaCobro = cobro.fecha_creacion ? new Date(cobro.fecha_creacion) : new Date();
-        const mesCobro = fechaCobro.getMonth();
-        
-        // Sumar unidades
         let unidadesCobro = 0;
-        cobro.contenido?.forEach(registro => {
-          unidadesCobro += registro.unidades || 0;
-        });
+        
+        if (cobro.contenido?.length > 0) {
+          unidadesCobro += cobro.contenido.reduce((sum, r) => sum + (r.unidades || 0), 0);
+        }
+        if (cobro.contenido_open?.length > 0) {
+          unidadesCobro += cobro.contenido_open.reduce((sum, r) => sum + (r.unidades || 0), 0);
+        }
+        if (cobro.contenido_spr?.length > 0) {
+          unidadesCobro += cobro.contenido_spr.reduce((sum, r) => sum + (r.unidades || 0), 0);
+        }
+        if (unidadesCobro === 0 && cobro.unidades) {
+          unidadesCobro = cobro.unidades;
+        }
         
         totalUnidades += unidadesCobro;
         
-        // Separar el mes actual
-        if (mesCobro === mesActual) {
+        if (cobro.mes && cobro.mes.toLowerCase() === nombreMesActual) {
           unidadesMesActual += unidadesCobro;
           valorMesActual += unidadesCobro * factor;
         }
       });
       
-      // Calcular total a cobrar
       totalCobrar = totalUnidades * factor;
       
-      // Actualizar estado con todos los datos calculados
       setResumenCobros({
         totalUnidades,
         totalCobrar: totalCobrar.toFixed(2),
@@ -145,30 +114,33 @@ const Home = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [rol]);
+
+  useEffect(() => {
+    const savedFirstName = localStorage.getItem("nombre");
+    const savedRol = localStorage.getItem("role") || "Invitado";
+    const savedUserId = localStorage.getItem("userID");
+    
+    setFirstName(savedFirstName);
+    setRol(savedRol);
+    
+    if (savedRol !== "SuperAdmin") {
+      cargarDatosCobros(savedUserId);
+    }
+  }, [cargarDatosCobros]);
 
   const saludo = getGreeting();
   const descripcionRol = getRolDescripcion(rol);
   const mesActual = getMesActual();
 
-  // Funciones de navegación (se mantienen aunque ya no tengan botones)
-  const irAListaCobros = () => {
-    navigate("/gestCobro/listarCobro");
-  };
-
-  const irAInsertarCobro = () => {
-    navigate("/gestCobro/insertarCobro");
-  };
-
   return (
     <div className="container-fluid py-4 px-4 bg-light" style={{minHeight: "92vh"}}>
-      {/* Encabezado */}
       <div className="card shadow mb-4">
         <div className="card-body">
           <div className="row align-items-center">
             <div className="col-md-8">
               <h1 className="display-6 text-primary fw-bold mb-1">
-                {saludo}, {username}!
+                {saludo}, {firstName}!
               </h1>
               <p className="text-secondary mb-0">
                 Bienvenido a su sistema de administración de contabilidad.
@@ -184,7 +156,6 @@ const Home = () => {
         </div>
       </div>
 
-      {/* Dashboard principal - Solo para usuarios que no son SuperAdmin */}
       {rol !== "SuperAdmin" ? (
         loading ? (
           <div className="text-center py-5">
@@ -200,9 +171,7 @@ const Home = () => {
           </div>
         ) : (
           <>
-            {/* Tarjetas de Resumen */}
             <div className="row g-4 mb-4">
-              {/* Tarjeta Total de Unidades */}
               <div className="col-md-6 col-lg-3">
                 <div className="card shadow h-100">
                   <div className="card-header bg-primary text-white">
@@ -215,7 +184,6 @@ const Home = () => {
                 </div>
               </div>
 
-              {/* Tarjeta Total a Cobrar */}
               <div className="col-md-6 col-lg-3">
                 <div className="card shadow h-100">
                   <div className="card-header bg-success text-white">
@@ -228,7 +196,6 @@ const Home = () => {
                 </div>
               </div>
 
-              {/* Tarjeta Clientes */}
               <div className="col-md-6 col-lg-3">
                 <div className="card shadow h-100">
                   <div className="card-header bg-info text-white">
@@ -241,7 +208,6 @@ const Home = () => {
                 </div>
               </div>
 
-              {/* Tarjeta Documentos */}
               <div className="col-md-6 col-lg-3">
                 <div className="card shadow h-100">
                   <div className="card-header bg-warning text-dark">
@@ -255,9 +221,7 @@ const Home = () => {
               </div>
             </div>
 
-            {/* Resumen Mensual (se mantiene pero se quitan las Acciones Rápidas) */}
             <div className="row g-4 mb-4">
-              {/* Tarjeta de Resumen Mensual ahora ocupa todo el ancho */}
               <div className="col-12">
                 <div className="card shadow">
                   <div className="card-header bg-dark text-white">
@@ -274,10 +238,7 @@ const Home = () => {
                               className="progress-bar bg-primary" 
                               role="progressbar" 
                               style={{width: `${Math.min(100, (resumenCobros.unidadesMesActual / (resumenCobros.totalUnidades || 1)) * 100)}%`}} 
-                              aria-valuenow={resumenCobros.unidadesMesActual} 
-                              aria-valuemin="0" 
-                              aria-valuemax={resumenCobros.totalUnidades}
-                            ></div>
+                            />
                           </div>
                           <p className="text-muted mb-0">
                             {Math.round((resumenCobros.unidadesMesActual / (resumenCobros.totalUnidades || 1)) * 100)}% del total
@@ -293,10 +254,7 @@ const Home = () => {
                               className="progress-bar bg-success" 
                               role="progressbar" 
                               style={{width: `${Math.min(100, (resumenCobros.valorMesActual / (resumenCobros.totalCobrar || 1)) * 100)}%`}} 
-                              aria-valuenow={resumenCobros.valorMesActual} 
-                              aria-valuemin="0" 
-                              aria-valuemax={resumenCobros.totalCobrar}
-                            ></div>
+                            />
                           </div>
                           <p className="text-muted mb-0">
                             {Math.round((resumenCobros.valorMesActual / (resumenCobros.totalCobrar || 1)) * 100)}% del total
@@ -311,7 +269,6 @@ const Home = () => {
           </>
         )
       ) : (
-        /* Contenido para SuperAdmin */
         <div className="row g-4">
           <div className="col-12">
             <div className="card shadow">
@@ -322,52 +279,6 @@ const Home = () => {
                 <p className="lead">
                   Como administrador del sistema, usted tiene acceso a todas las funciones de gestión.
                   Use el menú de navegación para acceder a las diferentes secciones del sistema.
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          {/* Tarjetas informativas para Admin */}
-          <div className="col-md-4">
-            <div className="card shadow h-100">
-              <div className="card-header bg-primary text-white">
-                <h5 className="card-title mb-0">
-                  <i className="bi bi-people me-2"></i> Usuarios
-                </h5>
-              </div>
-              <div className="card-body">
-                <p className="mb-0">
-                  Administre los usuarios del sistema, asigne roles y permisos para controlar el acceso a las distintas funciones.
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="col-md-4">
-            <div className="card shadow h-100">
-              <div className="card-header bg-info text-white">
-                <h5 className="card-title mb-0">
-                  <i className="bi bi-gear me-2"></i> Configuración
-                </h5>
-              </div>
-              <div className="card-body">
-                <p className="mb-0">
-                  Configure los parámetros generales del sistema de contabilidad, incluyendo tasas, impuestos y otras variables.
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="col-md-4">
-            <div className="card shadow h-100">
-              <div className="card-header bg-warning text-dark">
-                <h5 className="card-title mb-0">
-                  <i className="bi bi-bar-chart me-2"></i> Reportes
-                </h5>
-              </div>
-              <div className="card-body">
-                <p className="mb-0">
-                  Acceda a reportes completos y estadísticas del sistema para monitorear el rendimiento global.
                 </p>
               </div>
             </div>

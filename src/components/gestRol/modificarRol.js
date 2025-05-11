@@ -19,10 +19,10 @@ const ModificarRol = () => {
         const token = localStorage.getItem("auth");
         
         const [userResponse, rolesResponse] = await Promise.all([
-          axios.get(`http://localhost:8000/api/usuario/${id}`, {
+          axios.get(`https://sistemacontable-wico.onrender.com/api/usuario/${id}`, {
             headers: { Authorization: `Bearer ${token}` }
           }),
-          axios.get("http://localhost:8000/api/rol/", {
+          axios.get("https://sistemacontable-wico.onrender.com/api/rol/", {
             headers: { Authorization: `Bearer ${token}` }
           })
         ]);
@@ -48,7 +48,7 @@ const ModificarRol = () => {
       const token = localStorage.getItem("auth");
 
       await axios.put(
-        `http://localhost:8000/api/update_rol/${id}/`,
+        `https://sistemacontable-wico.onrender.com/api/update_rol/${id}/`,
         { rol: Number(rolSeleccionado) },
         {
           headers: {

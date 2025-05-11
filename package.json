@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "homepage": "https://rjdm02.github.io/Sistema-de-Contabilidad",
-
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^7.0.2",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
@@ -33,7 +35,6 @@
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build -r https://github.com/RJDM02/Sistema-de-Contabilidad.git"
-
   },
   "eslintConfig": {
     "extends": [

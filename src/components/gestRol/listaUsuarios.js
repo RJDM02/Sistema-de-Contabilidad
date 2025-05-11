@@ -14,7 +14,7 @@ const ListaUsuarios = () => {
         setLoading(true);
         setError(null);
         const token = localStorage.getItem("auth");
-        const response = await axios.get("http://localhost:8000/api/usuario/", {
+        const response = await axios.get("https://sistemacontable-wico.onrender.com/api/usuario/", {
           headers: {
             Authorization: `Bearer ${token}`,
           },

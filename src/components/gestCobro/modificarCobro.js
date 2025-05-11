@@ -14,11 +14,18 @@ const ModificarCobro = () => {
   const [cobroData, setCobroData] = useState({
     cliente: null,
     documento: null,
-    registrosSeleccionados: []
+    registrosSeleccionados: [],
+    mes: ''
   });
 
   // Todos los registros disponibles del documento
   const [registrosDisponibles, setRegistrosDisponibles] = useState([]);
+
+  // Lista de meses para el select
+  const meses = [
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+  ];
 
   // Obtener token de autenticación
   const getToken = () => localStorage.getItem('auth');
@@ -29,7 +36,7 @@ const ModificarCobro = () => {
       try {
         setLoading(true);
         const response = await axios.get(
-          `http://localhost:8000/api/listar_cobro_detalles/${id}/`,
+          `https://sistemacontable-wico.onrender.com/api/listar_cobro_detalles/${id}/`,
           {
             headers: { Authorization: `Bearer ${getToken()}` }
           }
@@ -43,11 +50,11 @@ const ModificarCobro = () => {
         setCobroData({
           cliente: cobro.cliente,
           documento: cobro.documento,
-          registrosSeleccionados: idsSeleccionados
+          registrosSeleccionados: idsSeleccionados,
+          mes: cobro.mes || ''
         });
 
         // Cargar todos los registros disponibles del documento
-        // (en este caso, los registros disponibles son los mismos que están en cobro.contenido)
         setRegistrosDisponibles(cobro.contenido || []);
         
       } catch (error) {
@@ -73,6 +80,12 @@ const ModificarCobro = () => {
     });
   };
 
+  // Manejar cambio del mes
+  const handleMesChange = (e) => {
+    const { value } = e.target;
+    setCobroData(prev => ({ ...prev, mes: value }));
+  };
+
   // Seleccionar todos los registros
   const selectAllRegistros = () => {
     const todosLosIds = registrosDisponibles.map(r => r.id);
@@ -95,6 +108,11 @@ const ModificarCobro = () => {
         throw new Error('Debe seleccionar al menos un registro');
       }
 
+      // Validación - mes seleccionado
+      if (!cobroData.mes) {
+        throw new Error('Debe seleccionar un mes');
+      }
+
       // Filtrar solo los registros seleccionados con sus datos completos
       const registrosSeleccionadosCompletos = registrosDisponibles.filter(r => 
         cobroData.registrosSeleccionados.includes(r.id)
@@ -102,12 +120,13 @@ const ModificarCobro = () => {
 
       // Preparar datos para enviar al backend
       const datosParaEnviar = {
-        contenido: registrosSeleccionadosCompletos
+        contenido: registrosSeleccionadosCompletos,
+        mes: cobroData.mes
       };
 
       // Enviar la modificación
       await axios.put(
-        `http://localhost:8000/api/modificar_cobro/${id}/`,
+        `https://sistemacontable-wico.onrender.com/api/modificar_cobro/${id}/`,
         datosParaEnviar,
         {
           headers: { 
@@ -172,6 +191,25 @@ const ModificarCobro = () => {
                 readOnly
                 disabled
               />
+            </div>
+
+            {/* Selección de mes */}
+            <div className="mb-3">
+              <label className="form-label">Mes *</label>
+              <select
+                name="mes"
+                className="form-select"
+                value={cobroData.mes}
+                onChange={handleMesChange}
+                required
+              >
+                <option value="">Seleccione un mes</option>
+                {meses.map(mes => (
+                  <option key={mes} value={mes}>
+                    {mes.charAt(0).toUpperCase() + mes.slice(1)}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Selección de registros */}
@@ -239,7 +277,7 @@ const ModificarCobro = () => {
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={submitting || cobroData.registrosSeleccionados.length === 0}
+                disabled={submitting || cobroData.registrosSeleccionados.length === 0 || !cobroData.mes}
               >
                 {submitting ? (
                   <>

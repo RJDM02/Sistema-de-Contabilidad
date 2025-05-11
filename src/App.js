@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
+import { HashRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 import RequireAuth from "./components/RequireAuth"; 
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'react-toastify/dist/ReactToastify.css';
@@ -39,11 +39,17 @@ import ModificarDocumentacion from "./components/gestDocumentacion/modificarDocu
 import ListarPagosCobros from "./components/gestPago/listarPagosCobros";
 import InsertarPagoCobros from "./components/gestPago/insertarPagoCobros";
 import ModificarPagosCobros from "./components/gestPago/modificarPagosCobros";
-import SancionarPagoCobros from "./components/gestPago/sancionarPagoCobros";
+import ListarPagosCobrosDetallados from "./components/gestPago/listarPagosCobrosDetallados";
+import ListarRegistrosDeCobros from "./components/gestPago/listarRegistrosDeCobros";
 
 // superVisarPagoCliente
 import ListarPagosClientes from "./components/superVisarPagoCliente/listarPagosClientes";
 import ModificarPagoCliente from "./components/superVisarPagoCliente/modificarPagoCliente";
+import ComparativaTotalCobrar from "./components/superVisarPagoCliente/comparativaTotalCobrar";
+
+// gestAgencia
+import ListarAgencias from "./components/gestAgencia/listarAgencias";
+import InsertarAgencia from "./components/gestAgencia/insertarAgencia";
 
 const Layout = () => {
   const location = useLocation();
@@ -72,7 +78,7 @@ function App() {
             <Route path="/home" element={<Home />} />
           </Route>
 
-          <Route element={<RequireAuth allowedRoles={["SuperAdmin", "Admin", "user_User"]} />}>
+          <Route element={<RequireAuth allowedRoles={["SuperAdmin", "Admin", "user_User", "user_Supervisor", "user_Supervisado"]} />}>
             <Route path="/changerPassword" element={<Changerpassword />} />
           </Route>
 
@@ -88,7 +94,7 @@ function App() {
             <Route path="/modificarRol/:id" element={<ModificarRol />} />
             {/* PagoCliente */}
             <Route path="/superVisarPagoCliente/listarPagosClientes" element={<ListarPagosClientes />} />
-            <Route path="/superVisarPagoCliente/modificarPagoCliente/:id" element={<ModificarPagoCliente />} />
+            <Route path="/superVisarPagoCliente/modificarPagoCliente/" element={<ModificarPagoCliente />} />
           </Route>
 
           <Route element={<RequireAuth allowedRoles={["SuperAdmin", "Admin"]} />}>
@@ -96,6 +102,10 @@ function App() {
             <Route path="/gestTrabajador/listaTrabajadores" element={<ListaTrabajadores />} />
             <Route path="/gestTrabajador/insertarTrabajador" element={<InsertarTrabajador />} />
             <Route path="/gestTrabajador/modificarTrabajador/:id" element={<ModificarTrabajador />} />
+            
+            {/* Agencia */}
+            <Route path="/gestAgencia/listarAgencias" element={<ListarAgencias />} />
+            <Route path="/gestAgencia/insertarAgencia" element={<InsertarAgencia />} />
 
             {/* Cliente */}
             <Route path="/gestCliente/listarClientes" element={<ListarClientes />} />
@@ -111,7 +121,12 @@ function App() {
             <Route path="/gestPago/listarPagosCobros" element={<ListarPagosCobros />} />
             <Route path="/gestPago/insertarPagoCobros" element={<InsertarPagoCobros />} />
             <Route path="/gestPago/modificarPagoCobros/:id" element={<ModificarPagosCobros />} />
-            <Route path="/gestPago/sancionarPagoCobros/:id" element={<SancionarPagoCobros />} />
+            <Route path="/gestPago/listarPagosCobrosDetallados/:userId" element={<ListarPagosCobrosDetallados />} />
+            <Route path="/gestPago/listarRegistrosDeCobros/:cobroId" element={<ListarRegistrosDeCobros />} />
+            
+            {/*SuperVisarPagoCliente*/}
+            <Route path="/superVisarPagoCliente/comparativaTotalCobrar" element={<ComparativaTotalCobrar/>} />
+
           </Route>
 
           {/* Página de acceso denegado */}
@@ -127,5 +142,6 @@ function App() {
 }
 
 export default App;
+
 
 

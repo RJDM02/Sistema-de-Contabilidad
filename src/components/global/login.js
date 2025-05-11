@@ -17,7 +17,7 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/api/login/", {
+      const response = await fetch("https://sistemacontable-wico.onrender.com/api/login/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -31,12 +31,24 @@ const Login = () => {
         const decodedToken = jwtDecode(data.token);
         const userRole = decodedToken.rol_nombre;
         const userID = decodedToken.id;
+        const nombre = decodedToken.name;
+        const apellido = decodedToken.apellido;
+        const ID_user = decodedToken.ID_user;
+        const Dir = decodedToken.Dir;
+        const phone = decodedToken.phone;
+        const subir_notas = decodedToken.subir_notas;
         
         localStorage.setItem("userID", userID);
         localStorage.setItem("auth", data.token);
         localStorage.setItem("role", userRole);
         localStorage.setItem("username", username);
-        
+        localStorage.setItem("nombre", nombre)
+        localStorage.setItem("apellido", apellido)
+        localStorage.setItem("ID_user", ID_user);
+        localStorage.setItem("Dir", Dir);
+        localStorage.setItem("phone", phone);
+        localStorage.setItem("subir_notas", subir_notas);
+
         navigate("/home");
       } else {
         setError(data.message || "Usuario o contraseña incorrectos");

@@ -17,7 +17,7 @@ const ListarClientes = () => {
         setLoading(true);
         setError(null);
         const token = localStorage.getItem("auth");
-        const response = await axios.get("http://localhost:8000/api/list_client/", {
+        const response = await axios.get("https://sistemacontable-wico.onrender.com/api/list_client/", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -50,7 +50,7 @@ const ListarClientes = () => {
       const token = localStorage.getItem("auth");
 
       await axios.delete(
-        `http://localhost:8000/api/desactivate_activate_client/${id}/`,
+        `https://sistemacontable-wico.onrender.com/api/desactivate_activate_client/${id}/`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -86,11 +86,19 @@ const ListarClientes = () => {
     }
   };
 
+  // Función para formatear la lista de agencias
+  const formatAgencias = (agenciasArray) => {
+    if (!agenciasArray || agenciasArray.length === 0) return "Ninguna";
+    return agenciasArray.map(agencia => agencia.nombre).join(", ");
+  };
+
+  // Ordenar los usuarios alfabéticamente por nombre
+  const usuariosOrdenados = [...usuarios].sort((a, b) => a.nombre.localeCompare(b.nombre));
+
   return (
     <div className="container mt-4">
-      {/* Contenedor de notificaciones - debe estar en el componente raíz */}
       <ToastContainer 
-        position="top-right"
+        position="top-left"
         autoClose={3000}
         hideProgressBar={false}
         newestOnTop={false}
@@ -99,10 +107,11 @@ const ListarClientes = () => {
         pauseOnFocusLoss
         draggable
         pauseOnHover
+        limit={1}
       />
       
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Lista de Usuarios</h2>
+        <h2>Lista de Clientes</h2>
         <button
           onClick={handleInsertarCliente}
           className="btn btn-primary"
@@ -122,17 +131,24 @@ const ListarClientes = () => {
                 <th>ID</th>
                 <th>Nombre</th>
                 <th>Fecha creación</th>
+                <th>Agencia(s)</th>
                 <th>Categoría</th>
                 <th>Estado</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {usuarios.map((usuario) => (
+              {usuariosOrdenados.map((usuario) => (
                 <tr key={usuario.id}>
                   <td>{usuario.id}</td>
                   <td>{usuario.nombre}</td>
                   <td>{usuario.creado}</td>
+                  <td>
+                    <div className="d-flex flex-column">
+                      {formatAgencias(usuario.agencia)}
+                      <small className="text-muted">({usuario.agencia?.length || 0} agencias)</small>
+                    </div>
+                  </td>
                   <td>{getCategoriaText(usuario.categoria)}</td>
                   <td>
                     <span className={`badge ${usuario.estado ? 'bg-success' : 'bg-secondary'}`}>

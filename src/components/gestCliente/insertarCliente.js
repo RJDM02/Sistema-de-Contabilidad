@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -8,11 +8,14 @@ const InsertarCliente = () => {
   const [formData, setFormData] = useState({
     nombre: "",
     categoria: "", // Este será "1" o "2" como string
+    agencia: [], // Cambiado a array para múltiples selecciones
   });
   
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [agencias, setAgencias] = useState([]);
+  const [loadingAgencias, setLoadingAgencias] = useState(true);
 
   // Opciones para el select de categoría
   const categorias = [
@@ -20,11 +23,50 @@ const InsertarCliente = () => {
     { value: "2", label: "TCM" }
   ];
 
+  // Cargar las agencias al montar el componente
+  useEffect(() => {
+    const fetchAgencias = async () => {
+      try {
+        const token = localStorage.getItem("auth");
+        const response = await axios.get(
+          "https://sistemacontable-wico.onrender.com/api/listar_agencia/",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        setAgencias(response.data);
+      } catch (error) {
+        console.error("Error al cargar las agencias:", error);
+      } finally {
+        setLoadingAgencias(false);
+      }
+    };
+
+    fetchAgencias();
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+  };
+
+  // Manejador específico para el select múltiple de agencias
+  const handleAgenciaChange = (e) => {
+    const options = e.target.options;
+    const selectedValues = [];
+    for (let i = 0; i < options.length; i++) {
+      if (options[i].selected) {
+        selectedValues.push(parseInt(options[i].value));
+      }
+    }
+    setFormData(prev => ({
+      ...prev,
+      agencia: selectedValues
     }));
   };
 
@@ -37,10 +79,11 @@ const InsertarCliente = () => {
       const token = localStorage.getItem("auth");
 
       await axios.post(
-        "http://localhost:8000/api/create_client/",
+        "https://sistemacontable-wico.onrender.com/api/create_client/",
         {
           nombre: formData.nombre,
           categoria: parseInt(formData.categoria), // Convertimos a número
+          agencia: formData.agencia, // Ahora es un array de IDs
         },
         {
           headers: {
@@ -71,6 +114,7 @@ const InsertarCliente = () => {
     setFormData({
       nombre: "",
       categoria: "",
+      agencia: [],
     });
     setSuccess(false);
     setError(null);
@@ -137,6 +181,29 @@ const InsertarCliente = () => {
               </select>
             </div>
             
+            <div className="mb-3">
+              <label htmlFor="agencia" className="form-label"><strong>Agencia(s):</strong></label>
+              <select
+                className="form-select"
+                id="agencia"
+                name="agencia"
+                multiple // Hace que el select sea múltiple
+                size="5" // Muestra 5 opciones a la vez (ajustable)
+                value={formData.agencia}
+                onChange={handleAgenciaChange}
+                required={formData.agencia.length === 0} // Requiere al menos una selección
+                disabled={loading || loadingAgencias}
+              >
+                {agencias.map((agencia) => (
+                  <option key={agencia.id} value={agencia.id}>
+                    {agencia.nombre}
+                  </option>
+                ))}
+              </select>
+              <small className="text-muted">Mantén presionado Ctrl (Windows) o Command (Mac) para seleccionar múltiples opciones</small>
+              {loadingAgencias && <div className="mt-2 text-muted">Cargando agencias...</div>}
+            </div>
+            
             <div className="d-flex justify-content-between">
               <button 
                 type="button" 
@@ -150,7 +217,7 @@ const InsertarCliente = () => {
               <button 
                 type="submit" 
                 className="btn btn-primary"
-                disabled={loading || !formData.nombre || !formData.categoria}
+                disabled={loading || !formData.nombre || !formData.categoria || formData.agencia.length === 0}
               >
                 {loading ? (
                   <>

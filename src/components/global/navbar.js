@@ -18,7 +18,6 @@ const Navbar = () => {
       try {
         const decodedToken = JSON.parse(atob(token.split('.')[1]));
         setUserRole(decodedToken.rol_nombre);
-        // Si hay un nombre de usuario en el token, también lo extraemos
         if (decodedToken.nombre) {
           setUserName(decodedToken.nombre);
         }
@@ -27,16 +26,15 @@ const Navbar = () => {
       }
     }
     
-    // Close dropdown when clicking outside
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowDropdown(false);
-      }
-    };
-    
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleClickOutside = (event) => {
+    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      setShowDropdown(false);
+    }
+  };
 
   const isActive = (path) => location.pathname.startsWith(path);
 
@@ -54,7 +52,7 @@ const Navbar = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
-  // Navigation items based on role
+  // Navigation items based on role - ordered as requested
   const getNavItems = () => {
     const items = [];
     
@@ -66,68 +64,106 @@ const Navbar = () => {
         label: "Home"
       });
     }
-    
-    // SuperAdmin specific links
-    if (userRole === "SuperAdmin") {
-      if (!isActive("/gestRol")) {
-        items.push({
-          path: "/gestRol/listaUsuarios",
-          icon: "bi-people",
-          label: "Gestionar Rol"
-        });
-      }
-      
-      if (!isActive("/superVisarPagoCliente")) {
-        items.push({
-          path: "/superVisarPagoCliente/listarPagosClientes",
-          icon: "bi-person-lines-fill",
-          label: "Supervisar Pagos de Clientes"
-        });
-      }
-    }
-    
-    // Links for Admin or regular Users
+
+    // COBROS - Primero para todos los usuarios
     if (userRole === "Admin" || userRole === "user_User" || userRole === "user_Supervisor" || userRole === "user_Supervisado") {
       if (!isActive("/gestCobro")) {
         items.push({
           path: "/gestCobro/listarCobros",
-          icon: "bi-people",
-          label: "Gestionar Cobros"
+          icon: "bi-cash-coin",
+          label: "Cobros"
+        });
+      }
+    }
+
+    // COBROS - Vista especial para SuperAdmin (también aparece como "Cobros")
+    if (userRole === "SuperAdmin") {
+      // Mostrar ambos items siempre para SuperAdmin
+      items.push({
+        path: "/superVisarPagoCliente/listarPagosClientes",
+        icon: "bi-cash-stack",
+        label: "Cobros"
+      });
+      
+      items.push({
+        path: "/superVisarPagoCliente/modificarPagoCliente",
+        icon: "bi-clock-history",
+        label: "Historial de Cobros"
+      });
+    }
+
+    // Comparativa - para SuperAdmin o Admin
+    if (userRole === "SuperAdmin" || userRole === "Admin") {
+        items.push({
+          path: "/superVisarPagoCliente/comparativaTotalCobrar",
+          icon: "bi-credit-card",
+          label: "Comparativa"
+        });
+    }
+
+    // PAGOS - para SuperAdmin o Admin
+    if (userRole === "SuperAdmin" || userRole === "Admin") {
+      if (!isActive("/gestPago")) {
+        items.push({
+          path: "/gestPago/listarPagosCobros",
+          icon: "bi-credit-card",
+          label: "Pagos"
         });
       }
     }
     
-    // Links for SuperAdmin or Admin
+
+    // TRABAJADORES - para SuperAdmin o Admin
     if (userRole === "SuperAdmin" || userRole === "Admin") {
       if (!isActive("/gestTrabajador")) {
         items.push({
           path: "/gestTrabajador/listaTrabajadores",
           icon: "bi-person-badge",
-          label: "Gestionar Trabajador"
+          label: "Trabajadores"
         });
       }
-      
+    }
+
+    // ROL - Solo SuperAdmin
+    if (userRole === "SuperAdmin") {
+      if (!isActive("/gestRol")) {
+        items.push({
+          path: "/gestRol/listaUsuarios",
+          icon: "bi-people",
+          label: "Rol"
+        });
+      }
+    }
+
+    // CLIENTES - para SuperAdmin o Admin
+    if (userRole === "SuperAdmin" || userRole === "Admin") {
       if (!isActive("/gestCliente")) {
         items.push({
           path: "/gestCliente/listarClientes",
           icon: "bi-person-lines-fill",
-          label: "Gestionar Clientes"
+          label: "Clientes"
         });
       }
-      
+    }
+
+    // AGENCIAS - para SuperAdmin o Admin
+    if (userRole === "SuperAdmin" || userRole === "Admin") {
+      if (!isActive("/gestAgencia")) {
+        items.push({
+          path: "/gestAgencia/listarAgencias",
+          icon: "bi-building",
+          label: "Agencias"
+        });
+      }
+    }
+
+    // DOCUMENTACIÓN - para SuperAdmin o Admin
+    if (userRole === "SuperAdmin" || userRole === "Admin") {
       if (!isActive("/gestDocumentacion")) {
         items.push({
           path: "/gestDocumentacion/listarDocumentacion",
           icon: "bi-file-earmark-text",
-          label: "Gestionar Documentación"
-        });
-      }
-      
-      if (!isActive("/gestPago")) {
-        items.push({
-          path: "/gestPago/listarPagosCobros",
-          icon: "bi-credit-card",
-          label: "Gestionar Pagos"
+          label: "Documentación"
         });
       }
     }
@@ -137,15 +173,14 @@ const Navbar = () => {
 
   const navItems = getNavItems();
 
-  // Función para generar color basado en el rol
   const getRoleColor = () => {
     switch (userRole) {
-      case "SuperAdmin": return "#4c51bf"; // Púrpura
-      case "Admin": return "#2b6cb0"; // Azul
-      case "user_User": return "#2f855a"; // Verde
-      case "user_Supervisor": return "#c05621"; // Naranja
-      case "user_Supervisado": return "#718096"; // Gris
-      default: return "#6b7280"; // Gris por defecto
+      case "SuperAdmin": return "#4c51bf";
+      case "Admin": return "#2b6cb0";
+      case "user_User": return "#2f855a";
+      case "user_Supervisor": return "#c05621";
+      case "user_Supervisado": return "#718096";
+      default: return "#6b7280";
     }
   };
 
@@ -218,7 +253,7 @@ const Navbar = () => {
               </li>
             ))}
 
-            {/* User Dropdown with avatar-style circle */}
+            {/* User Dropdown */}
             <li className="nav-item ms-3" ref={dropdownRef}>
               <button 
                 className="btn d-flex align-items-center justify-content-center" 
@@ -258,7 +293,7 @@ const Navbar = () => {
                     overflow: 'hidden'
                   }}
                 >
-                  {/* Cabecera del perfil */}
+                  {/* Profile Header */}
                   <div className="text-center py-3" style={{ 
                     backgroundColor: getRoleColor(),
                     marginTop: '-8px',
@@ -285,7 +320,7 @@ const Navbar = () => {
                     {(userRole === "SuperAdmin" || userRole === "Admin") ? "Administrador" : "Usuario"}
                   </div>
                   
-                  {/* Opciones del menú */}
+                  {/* Menu Options */}
                   <div className="px-2">
                     <button 
                       className="dropdown-item d-flex align-items-center py-2" 
@@ -337,7 +372,7 @@ const Navbar = () => {
                         marginRight: '12px',
                         color: '#ef4444'
                       }}>
-                        <i className="bi bi-door-closed-fill"></i> {/* Puerta cerrándose para logout */}
+                        <i className="bi bi-door-closed-fill"></i>
                       </div>
                       <div>
                         <span className="d-block" style={{ fontWeight: '500', fontSize: '0.95rem' }}>Cerrar Sesión</span>
@@ -356,4 +391,3 @@ const Navbar = () => {
 };
 
 export default Navbar;
-

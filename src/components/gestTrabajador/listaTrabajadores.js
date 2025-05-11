@@ -27,10 +27,10 @@ const ListaTrabajadores = () => {
                 const userId = decodedToken.user_id;
 
                 const [userResp, usuariosResp] = await Promise.all([
-                    axios.get(`http://localhost:8000/api/usuario/${userId}/`, {
+                    axios.get(`https://sistemacontable-wico.onrender.com/api/usuario/${userId}/`, {
                         headers: { Authorization: `Bearer ${token}` }
                     }),
-                    axios.get("http://localhost:8000/api/usuario/", {
+                    axios.get("https://sistemacontable-wico.onrender.com/api/usuario/", {
                         headers: { Authorization: `Bearer ${token}` }
                     })
                 ]);
@@ -67,7 +67,7 @@ const ListaTrabajadores = () => {
             const token = localStorage.getItem("auth");
 
             await axios.patch(
-                `http://localhost:8000/api/usuario/${id}/`,
+                `https://sistemacontable-wico.onrender.com/api/usuario/${id}/`,
                 { is_active: !currentState },
                 {
                     headers: {

@@ -5,6 +5,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 const ListarCobros = () => {
+  // 1. ESTADOS DEL COMPONENTE
   const [cobros, setCobros] = useState([]);
   const [cobrosFiltrados, setCobrosFiltrados] = useState([]);
   const [cobrosSupervisados, setCobrosSupervisados] = useState([]);
@@ -18,11 +19,18 @@ const ListarCobros = () => {
 
   // Estados para filtros
   const [filtroTexto, setFiltroTexto] = useState('');
-  const [filtroTipo, setFiltroTipo] = useState('cliente'); // 'cliente' o 'documento'
-  const [filtroTabla, setFiltroTabla] = useState('misCobros'); // 'misCobros' o 'cobrosSupervisados'
+  const [filtroTipo, setFiltroTipo] = useState('cliente');
+  const [filtroTabla, setFiltroTabla] = useState('misCobros');
+  const [filtroMes, setFiltroMes] = useState('');
   const [filtrosAplicados, setFiltrosAplicados] = useState(false);
 
-  // Obtener token de autenticación y datos de usuario
+  // Lista de meses para el filtro
+  const meses = [
+    '', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+  ];
+
+  // 2. FUNCIONES AUXILIARES
   const getAuthData = () => {
     const token = localStorage.getItem("auth");
     const role = localStorage.getItem("role");
@@ -32,7 +40,44 @@ const ListarCobros = () => {
     return token;
   };
 
-  // Obtener lista de cobros
+  const getAgenciasNames = (agencias) => {
+    if (!agencias || !Array.isArray(agencias)) return 'N/A';
+    return agencias.map(agencia => agencia.nombre).join(', ');
+  };
+
+  // Función para calcular unidades netas (incluyendo bonificación/sanción)
+  const calcularUnidadesNetas = (cobro) => {
+    let unidadesNetas = 0;
+    
+    // Sumar unidades de contenido
+    if (cobro.contenido?.length > 0) {
+      unidadesNetas += cobro.contenido.reduce((sum, item) => sum + (parseInt(item.unidades) || 0), 0);
+    }
+    
+    if (cobro.contenido_open?.length > 0) {
+      unidadesNetas += cobro.contenido_open.reduce((sum, item) => sum + (parseInt(item.unidades) || 0), 0);
+    }
+    
+    if (cobro.contenido_spr?.length > 0) {
+      unidadesNetas += cobro.contenido_spr.reduce((sum, item) => sum + (parseInt(item.unidades) || 0), 0);
+    }
+    
+    // Si no hay contenido detallado, usar unidades directas
+    if ((!cobro.contenido || cobro.contenido.length === 0) &&
+        (!cobro.contenido_open || cobro.contenido_open.length === 0) &&
+        (!cobro.contenido_spr || cobro.contenido_spr.length === 0)) {
+      unidadesNetas = parseInt(cobro.unidades) || 0;
+    }
+    
+    // Aplicar bonificación/sanción
+    unidadesNetas += parseFloat(cobro.bonificado) || 0;
+    unidadesNetas -= parseFloat(cobro.sancionado) || 0;
+    
+    // No permitir unidades negativas
+    return Math.max(0, unidadesNetas);
+  };
+
+  // 3. EFECTOS (useEffect)
   useEffect(() => {
     const fetchCobros = async () => {
       try {
@@ -40,39 +85,31 @@ const ListarCobros = () => {
         setError(null);
         const token = getAuthData();
         
-        // 1. Obtener cobros del usuario actual
-        const response = await axios.get("http://localhost:8000/api/listar_cobro_usuario_en_sesion/", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        const response = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro_usuario_en_sesion/", {
+          headers: { Authorization: `Bearer ${token}` }
         });
         setCobros(response.data);
-        setCobrosFiltrados(response.data); // Inicializar con todos los datos
+        setCobrosFiltrados(response.data);
 
-        // 2. Si es supervisor, obtener y filtrar cobros supervisados
         if (userRole === 'user_Supervisor') {
-          const responseAll = await axios.get("http://localhost:8000/api/listar_cobro/", {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+          const responseAll = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro/", {
+            headers: { Authorization: `Bearer ${token}` }
           });
           
           const userIdNumber = Number(localStorage.getItem("userID"));
-          
-          // Filtrar cobros donde el supervisor sea el usuario actual
           const supervisados = responseAll.data.filter(cobro => 
             cobro.usuario_supervisor && 
             cobro.usuario_supervisor.id === userIdNumber
           );
           setCobrosSupervisados(supervisados);
-          setCobrosSupervisadosFiltrados(supervisados); // Inicializar con todos los datos
+          setCobrosSupervisadosFiltrados(supervisados);
         }
         
-        toast.success("Cobros cargados correctamente");
+        mostrarNotificacion("Cobros cargados correctamente");
       } catch (error) {
         console.error("Error al obtener los cobros", error);
         setError("Error al cargar la lista de cobros");
-        toast.error("Error al cargar los cobros");
+        mostrarNotificacion("Error al cargar los cobros", 'error');
       } finally {
         setLoading(false);
       }
@@ -81,10 +118,9 @@ const ListarCobros = () => {
     fetchCobros();
   }, [userRole, userId]);
 
-  // Función para aplicar filtros
+  // 4. MANEJADORES DE EVENTOS
   const aplicarFiltros = () => {
-    if (!filtroTexto.trim()) {
-      // Si no hay texto de filtro, mostrar todos los datos
+    if (!filtroTexto.trim() && !filtroMes) {
       setCobrosFiltrados(cobros);
       setCobrosSupervisadosFiltrados(cobrosSupervisados);
       setFiltrosAplicados(false);
@@ -92,38 +128,41 @@ const ListarCobros = () => {
     }
 
     const textoFiltro = filtroTexto.toLowerCase().trim();
+    const mesFiltro = filtroMes.toLowerCase();
     
     if (filtroTabla === 'misCobros' || filtroTabla === 'ambos') {
       const filtrado = cobros.filter(cobro => {
-        if (filtroTipo === 'cliente') {
-          return cobro.cliente?.nombre?.toLowerCase().includes(textoFiltro);
-        } else if (filtroTipo === 'documento') {
-          return cobro.documento?.nombre_documento?.toLowerCase().includes(textoFiltro);
-        }
-        return false;
+        const cumpleTexto = !textoFiltro || 
+          (filtroTipo === 'cliente' && cobro.cliente?.nombre?.toLowerCase().includes(textoFiltro)) ||
+          (filtroTipo === 'documento' && cobro.documento?.nombre_documento?.toLowerCase().includes(textoFiltro));
+        
+        const cumpleMes = !filtroMes || cobro.mes?.toLowerCase() === mesFiltro;
+        
+        return cumpleTexto && cumpleMes;
       });
       setCobrosFiltrados(filtrado);
     }
     
     if ((filtroTabla === 'cobrosSupervisados' || filtroTabla === 'ambos') && userRole === 'user_Supervisor') {
       const filtrado = cobrosSupervisados.filter(cobro => {
-        if (filtroTipo === 'cliente') {
-          return cobro.cliente?.nombre?.toLowerCase().includes(textoFiltro);
-        } else if (filtroTipo === 'documento') {
-          return cobro.documento?.nombre_documento?.toLowerCase().includes(textoFiltro);
-        }
-        return false;
+        const cumpleTexto = !textoFiltro || 
+          (filtroTipo === 'cliente' && cobro.cliente?.nombre?.toLowerCase().includes(textoFiltro)) ||
+          (filtroTipo === 'documento' && cobro.documento?.nombre_documento?.toLowerCase().includes(textoFiltro));
+        
+        const cumpleMes = !filtroMes || cobro.mes?.toLowerCase() === mesFiltro;
+        
+        return cumpleTexto && cumpleMes;
       });
       setCobrosSupervisadosFiltrados(filtrado);
     }
     
     setFiltrosAplicados(true);
-    toast.info("Filtros aplicados");
+    mostrarNotificacion("Filtros aplicados", 'info');
   };
 
-  // Función para limpiar filtros
   const limpiarFiltros = () => {
     setFiltroTexto('');
+    setFiltroMes('');
     setCobrosFiltrados(cobros);
     setCobrosSupervisadosFiltrados(cobrosSupervisados);
     setFiltrosAplicados(false);
@@ -131,7 +170,19 @@ const ListarCobros = () => {
   };
 
   const handleModificar = (id) => {
-    navigate(`/gestCobro/modificarCobro/${id}`);
+    const cobro = cobrosFiltrados.find(c => c.id === id) || 
+                 cobrosSupervisadosFiltrados.find(c => c.id === id);
+    
+    if (cobro) {
+      let tipoCobro = 'bill';
+      if (cobro.contenido_open?.length > 0) {
+        tipoCobro = 'open';
+      } else if (cobro.contenido_spr?.length > 0) {
+        tipoCobro = 'spr';
+      }
+      
+      navigate(`/gestCobro/modificarCobro/${id}?tipo=${tipoCobro}`);
+    }
   };
 
   const handleInsertarCobro = () => {
@@ -146,16 +197,10 @@ const ListarCobros = () => {
       const token = getAuthData();
       
       await axios.delete(
-        `http://localhost:8000/api/eliminar_cobro/${id}/`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        `https://sistemacontable-wico.onrender.com/api/eliminar_cobro/${id}/`,
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
       );
 
-      // Actualizar ambas listas
       const cobrosActualizados = cobros.filter(cobro => cobro.id !== id);
       setCobros(cobrosActualizados);
       setCobrosFiltrados(cobrosActualizados);
@@ -177,19 +222,16 @@ const ListarCobros = () => {
     }
   };
 
-  // Función para "Mis Cobros" (0.40 para no supervisados, 0.20 para supervisados)
   const calcularTotalesGenerales = (listaCobros, esSupervisado = false) => {
     let totalUnidades = 0;
     let totalCobrar = 0;
     const factor = esSupervisado ? 0.40 : 0.20;
     
     listaCobros.forEach(cobro => {
-      cobro.contenido?.forEach(registro => {
-        totalUnidades += registro.unidades || 0;
-      });
+      const unidadesNetas = calcularUnidadesNetas(cobro);
+      totalUnidades += unidadesNetas;
+      totalCobrar += unidadesNetas * factor;
     });
-
-    totalCobrar = totalUnidades * factor;
     
     return {
       totalUnidades,
@@ -197,19 +239,16 @@ const ListarCobros = () => {
     };
   };
 
-  // Función específica para "Cobros Supervisados" (siempre 0.20)
   const calcularTotalesSupervisados = (listaCobros) => {
     let totalUnidades = 0;
     let totalCobrar = 0;
     const factor = 0.20;
     
     listaCobros.forEach(cobro => {
-      cobro.contenido?.forEach(registro => {
-        totalUnidades += registro.unidades || 0;
-      });
+      const unidadesNetas = calcularUnidadesNetas(cobro);
+      totalUnidades += unidadesNetas;
+      totalCobrar += unidadesNetas * factor;
     });
-
-    totalCobrar = totalUnidades * factor;
     
     return {
       totalUnidades,
@@ -217,26 +256,35 @@ const ListarCobros = () => {
     };
   };
 
-  // Calcular totales para "Mis Cobros" (utilizando la lista filtrada cuando hay filtros)
   const { totalUnidades, totalCobrar } = calcularTotalesGenerales(
     cobrosFiltrados, 
     userRole === 'user_Supervisor' || userRole === 'Admin' || userRole === 'user_User'
   );
   
-  // Calcular totales para "Cobros Supervisados" (utilizando la lista filtrada cuando hay filtros)
   const { 
     totalUnidades: totalUnidadesSupervisados, 
     totalCobrar: totalCobrarSupervisados 
   } = calcularTotalesSupervisados(cobrosSupervisadosFiltrados);
 
-  // Calcular totales globales
   const totalUnidadesGlobal = totalUnidades + totalUnidadesSupervisados;
   const totalCobrarGlobal = parseFloat(totalCobrar) + parseFloat(totalCobrarSupervisados);
 
+  const mostrarNotificacion = (mensaje, tipo = 'success') => {
+    toast.dismiss();
+    if (tipo === 'success') {
+      toast.success(mensaje);
+    } else if (tipo === 'error') {
+      toast.error(mensaje);
+    } else if (tipo === 'info') {
+      toast.info(mensaje);
+    }
+  };
+
+  // 6. RENDERIZADO DEL COMPONENTE
   return (
     <div className="container mt-4">
       <ToastContainer 
-        position="top-right"
+        position="top-left"
         autoClose={3000}
         hideProgressBar={false}
         newestOnTop={false}
@@ -245,26 +293,24 @@ const ListarCobros = () => {
         pauseOnFocusLoss
         draggable
         pauseOnHover
+        limit={1}
       />
       
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>Lista de Cobros</h2>
-        <button
-          onClick={handleInsertarCobro}
-          className="btn btn-primary"
-        >
+        <button onClick={handleInsertarCobro} className="btn btn-primary">
           Insertar Cobro
         </button>
       </div>
 
-      {/* Barra de filtros */}
+      {/* Sección de Filtros */}
       <div className="card mb-4 shadow-sm">
         <div className="card-header bg-primary text-white">
           <h4 className="m-0">Filtros de Búsqueda</h4>
         </div>
         <div className="card-body">
           <div className="row g-3">
-            <div className="col-md-4">
+            <div className="col-md-3">
               <label className="form-label">Buscar por:</label>
               <div className="input-group">
                 <span className="input-group-text">
@@ -280,7 +326,7 @@ const ListarCobros = () => {
               </div>
             </div>
             
-            <div className="col-md-3">
+            <div className="col-md-2">
               <label className="form-label">Filtrar por:</label>
               <select 
                 className="form-select" 
@@ -292,7 +338,22 @@ const ListarCobros = () => {
               </select>
             </div>
             
-            <div className="col-md-3">
+            <div className="col-md-2">
+              <label className="form-label">Mes:</label>
+              <select
+                className="form-select"
+                value={filtroMes}
+                onChange={(e) => setFiltroMes(e.target.value)}
+              >
+                {meses.map((mes, index) => (
+                  <option key={index} value={mes}>
+                    {mes === '' ? 'Todos' : mes.charAt(0).toUpperCase() + mes.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="col-md-2">
               <label className="form-label">Aplicar en:</label>
               <select 
                 className="form-select" 
@@ -309,19 +370,13 @@ const ListarCobros = () => {
               </select>
             </div>
             
-            <div className="col-md-2 d-flex align-items-end">
+            <div className="col-md-3 d-flex align-items-end gap-2">
               {!filtrosAplicados ? (
-                <button 
-                  className="btn btn-success w-100" 
-                  onClick={aplicarFiltros}
-                >
+                <button className="btn btn-success flex-grow-1" onClick={aplicarFiltros}>
                   Aplicar Filtros
                 </button>
               ) : (
-                <button 
-                  className="btn btn-secondary w-100" 
-                  onClick={limpiarFiltros}
-                >
+                <button className="btn btn-secondary flex-grow-1" onClick={limpiarFiltros}>
                   Limpiar Filtros
                 </button>
               )}
@@ -331,8 +386,10 @@ const ListarCobros = () => {
           {filtrosAplicados && (
             <div className="alert alert-info mt-3 mb-0">
               <i className="bi bi-info-circle-fill me-2"></i>
-              Mostrando resultados filtrados por: <strong>{filtroTipo === 'cliente' ? 'Cliente' : 'Documento'}</strong> 
-              que contiene "<strong>{filtroTexto}</strong>"
+              Mostrando resultados filtrados por: 
+              {filtroTipo && <strong> {filtroTipo === 'cliente' ? 'Cliente' : 'Documento'}</strong>}
+              {filtroTexto && <> que contiene "<strong>{filtroTexto}</strong>"</>}
+              {filtroMes && <> del mes de <strong>{filtroMes.charAt(0).toUpperCase() + filtroMes.slice(1)}</strong></>}
             </div>
           )}
         </div>
@@ -362,7 +419,7 @@ const ListarCobros = () => {
                     </div>
                     <div className="card-body text-center">
                       <div className="mt-2">
-                        <p className="mb-1"><strong>Total Unidades:</strong> {totalUnidades}</p>
+                        <p className="mb-1"><strong>Total Unidades Netas:</strong> {totalUnidades}</p>
                         <p className="mb-0"><strong>Total a Cobrar:</strong> ${totalCobrar}</p>
                       </div>
                     </div>
@@ -377,7 +434,7 @@ const ListarCobros = () => {
                       </div>
                       <div className="card-body text-center">
                         <div className="mt-2">
-                          <p className="mb-1"><strong>Total Unidades:</strong> {totalUnidadesSupervisados}</p>
+                          <p className="mb-1"><strong>Total Unidades Netas:</strong> {totalUnidadesSupervisados}</p>
                           <p className="mb-0"><strong>Total a Cobrar:</strong> ${totalCobrarSupervisados}</p>
                         </div>
                       </div>
@@ -392,7 +449,7 @@ const ListarCobros = () => {
                     </div>
                     <div className="card-body text-center">
                       <div className="mt-2">
-                        <p className="mb-1"><strong>Total Unidades:</strong> {totalUnidadesGlobal}</p>
+                        <p className="mb-1"><strong>Total Unidades Netas:</strong> {totalUnidadesGlobal}</p>
                         <p className="mb-0"><strong>Total a Cobrar:</strong> ${totalCobrarGlobal.toFixed(2)}</p>
                       </div>
                     </div>
@@ -402,7 +459,7 @@ const ListarCobros = () => {
             </div>
           </div>
 
-          {/* Tabla principal de cobros del usuario */}
+          {/* Tabla de Mis Cobros */}
           <div className="card mb-4 shadow-sm">
             <div className="card-header bg-dark text-white d-flex justify-content-between align-items-center">
               <h3 className="m-0">Mis Cobros</h3>
@@ -419,57 +476,87 @@ const ListarCobros = () => {
                     <tr>
                       <th>ID</th>
                       <th>Cliente</th>
+                      <th>Agencia(s)</th>
                       <th>Documento</th>
+                      <th>Mes</th>
                       <th>Registros</th>
+                      <th>Bonos/Descuentos</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {cobrosFiltrados.map((cobro) => (
-                      <tr key={`mis-cobros-${cobro.id}`}>
-                        <td>{cobro.id}</td>
-                        <td>{cobro.cliente?.nombre || 'N/A'}</td>
-                        <td>{cobro.documento?.nombre_documento || 'N/A'}</td>
-                        <td>
-                          <div style={{ 
-                            maxHeight: '120px', 
-                            overflowY: 'auto',
-                            paddingRight: '10px'
-                          }}>
-                            {cobro.contenido?.map(registro => (
-                              <div key={registro.id} className="mb-1">
-                                {registro.nombre_completo} - {registro.unidades} unidades
+                    {cobrosFiltrados.map((cobro) => {
+                      const tieneContenido = (cobro.contenido?.length > 0) || 
+                                           (cobro.contenido_open?.length > 0) || 
+                                           (cobro.contenido_spr?.length > 0);
+                      const bonificacion = parseFloat(cobro.bonificado) || 0;
+                      const sancion = parseFloat(cobro.sancionado) || 0;
+                      const bonifSanc = bonificacion - sancion;
+                      
+                      return (
+                        <tr key={`mis-cobros-${cobro.id}`}>
+                          <td>{cobro.id}</td>
+                          <td>{cobro.cliente?.nombre || 'N/A'}</td>
+                          <td>{getAgenciasNames(cobro.cliente?.agencias)}</td>
+                          <td>{cobro.documento?.nombre_documento || 'N/A'}</td>
+                          <td>{cobro.mes}</td>
+                          <td>
+                            {tieneContenido ? (
+                              <div style={{ maxHeight: '120px', overflowY: 'auto', paddingRight: '10px' }}>
+                                {cobro.contenido?.map(registro => (
+                                  <div key={`regular-${registro.id}`} className="mb-1">
+                                    {registro.nombre_completo} - {registro.unidades} unidades (Bill)
+                                  </div>
+                                ))}
+                                {cobro.contenido_open?.map(registro => (
+                                  <div key={`open-${registro.id}`} className="mb-1">
+                                    {registro.nombre_completo} - {registro.unidades} unidades (Open)
+                                  </div>
+                                ))}
+                                {cobro.contenido_spr?.map(registro => (
+                                  <div key={`spr-${registro.id}`} className="mb-1">
+                                    {registro.nombre_completo} - {registro.unidades} unidades (SPR)
+                                  </div>
+                                ))}
                               </div>
-                            )) || 'No hay registros'}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="d-flex gap-2">
-                            <button 
-                              onClick={() => handleModificar(cobro.id)}
-                              className="btn btn-sm btn-warning"
-                              disabled={deletingId === cobro.id}
-                            >
-                              Modificar
-                            </button>
-                            <button
-                              onClick={() => handleEliminar(cobro.id)}
-                              className="btn btn-sm btn-danger"
-                              disabled={deletingId === cobro.id}
-                            >
-                              {deletingId === cobro.id ? (
-                                <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                              ) : 'Eliminar'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                            ) : (
+                              <div className="text-center">
+                                <strong>Unidades del cobro: {cobro.unidades || 0}</strong>
+                              </div>
+                            )}
+                          </td>
+                          <td className={bonifSanc > 0 ? 'text-success' : bonifSanc < 0 ? 'text-danger' : ''}>
+                            {bonifSanc > 0 ? `+${bonifSanc}` : bonifSanc}
+                          </td>
+                          <td>
+                            <div className="d-flex gap-2">
+                              {tieneContenido && (
+                                <button 
+                                  onClick={() => handleModificar(cobro.id)}
+                                  className="btn btn-sm btn-warning"
+                                  disabled={deletingId === cobro.id}
+                                >
+                                  Modificar
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleEliminar(cobro.id)}
+                                className="btn btn-sm btn-danger"
+                                disabled={deletingId === cobro.id}
+                              >
+                                {deletingId === cobro.id ? (
+                                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                ) : 'Eliminar'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     
-                    {/* Mensaje si no hay resultados */}
                     {cobrosFiltrados.length === 0 && (
                       <tr>
-                        <td colSpan="5" className="text-center py-4">
+                        <td colSpan="8" className="text-center py-4">
                           <div className="alert alert-secondary mb-0">
                             No se encontraron registros que coincidan con el filtro
                           </div>
@@ -477,14 +564,13 @@ const ListarCobros = () => {
                       </tr>
                     )}
                     
-                    {/* Fila de totales */}
                     {cobrosFiltrados.length > 0 && (
                       <tr className="table-secondary">
-                        <td colSpan="3"><strong>Totales</strong></td>
+                        <td colSpan="5"><strong>Totales</strong></td>
                         <td>
                           <strong>Total unidades: {totalUnidades}</strong>
                         </td>
-                        <td>
+                        <td colSpan="2">
                           <strong>Total a cobrar: ${totalCobrar}</strong>
                         </td>
                       </tr>
@@ -495,7 +581,7 @@ const ListarCobros = () => {
             </div>
           </div>
 
-          {/* Tabla de cobros supervisados (solo para user_Supervisor) */}
+          {/* Tabla de Cobros Supervisados (solo para user_Supervisor) */}
           {userRole === 'user_Supervisor' && (
             <div className="card shadow-sm">
               <div className="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
@@ -515,46 +601,71 @@ const ListarCobros = () => {
                           <th>ID</th>
                           <th>Usuario</th>
                           <th>Cliente</th>
+                          <th>Agencia(s)</th>
                           <th>Documento</th>
+                          <th>Mes</th>
                           <th>Registros</th>
+                          <th>Bonos/Descuentos</th>
                           <th>Total Unidades</th>
                           <th>Total a Cobrar (0.20)</th>
                         </tr>
                       </thead>
                       <tbody>
                         {cobrosSupervisadosFiltrados.map((cobro) => {
-                          const unidadesCobro = cobro.contenido?.reduce((sum, r) => sum + (r.unidades || 0), 0) || 0;
-                          const totalCobro = (unidadesCobro * 0.20).toFixed(2);
+                          const tieneContenido = (cobro.contenido?.length > 0) || 
+                                               (cobro.contenido_open?.length > 0) || 
+                                               (cobro.contenido_spr?.length > 0);
+                          const bonificacion = parseFloat(cobro.bonificado) || 0;
+                          const sancion = parseFloat(cobro.sancionado) || 0;
+                          const bonifSanc = bonificacion - sancion;
+                          const unidadesNetas = calcularUnidadesNetas(cobro);
+                          const totalCobro = (unidadesNetas * 0.20).toFixed(2);
                           
                           return (
                             <tr key={`supervisados-${cobro.id}`}>
                               <td>{cobro.id}</td>
                               <td>{cobro.usuario_supervisor?.nombre || 'N/A'}</td>
                               <td>{cobro.cliente?.nombre || 'N/A'}</td>
+                              <td>{getAgenciasNames(cobro.cliente?.agencias)}</td>
                               <td>{cobro.documento?.nombre_documento || 'N/A'}</td>
+                              <td>{cobro.mes}</td>
                               <td>
-                                <div style={{ 
-                                  maxHeight: '120px', 
-                                  overflowY: 'auto',
-                                  paddingRight: '10px'
-                                }}>
-                                  {cobro.contenido?.map(registro => (
-                                    <div key={registro.id} className="mb-1">
-                                      {registro.nombre_completo} - {registro.unidades} unidades
-                                    </div>
-                                  )) || 'No hay registros'}
-                                </div>
+                                {tieneContenido ? (
+                                  <div style={{ maxHeight: '120px', overflowY: 'auto', paddingRight: '10px' }}>
+                                    {cobro.contenido?.map(registro => (
+                                      <div key={`regular-${registro.id}`} className="mb-1">
+                                        {registro.nombre_completo} - {registro.unidades} unidades (Bill)
+                                      </div>
+                                    ))}
+                                    {cobro.contenido_open?.map(registro => (
+                                      <div key={`open-${registro.id}`} className="mb-1">
+                                        {registro.nombre_completo} - {registro.unidades} unidades (Open)
+                                      </div>
+                                    ))}
+                                    {cobro.contenido_spr?.map(registro => (
+                                      <div key={`spr-${registro.id}`} className="mb-1">
+                                        {registro.nombre_completo} - {registro.unidades} unidades (SPR)
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center">
+                                    <strong>Unidades del cobro: {cobro.unidades || 0}</strong>
+                                  </div>
+                                )}
                               </td>
-                              <td>{unidadesCobro}</td>
+                              <td className={bonifSanc > 0 ? 'text-success' : bonifSanc < 0 ? 'text-danger' : ''}>
+                                {bonifSanc > 0 ? `+${bonifSanc}` : bonifSanc}
+                              </td>
+                              <td>{unidadesNetas}</td>
                               <td>${totalCobro}</td>
                             </tr>
                           );
                         })}
                         
-                        {/* Mensaje si no hay resultados */}
                         {cobrosSupervisadosFiltrados.length === 0 && (
                           <tr>
-                            <td colSpan="7" className="text-center py-4">
+                            <td colSpan="10" className="text-center py-4">
                               <div className="alert alert-secondary mb-0">
                                 No se encontraron registros que coincidan con el filtro
                               </div>
@@ -562,14 +673,13 @@ const ListarCobros = () => {
                           </tr>
                         )}
                         
-                        {/* Fila de totales supervisados */}
                         {cobrosSupervisadosFiltrados.length > 0 && (
                           <tr className="table-secondary">
-                            <td colSpan="5"><strong>Totales Supervisados</strong></td>
+                            <td colSpan="7"><strong>Totales Supervisados</strong></td>
                             <td>
                               <strong>{totalUnidadesSupervisados}</strong>
                             </td>
-                            <td>
+                            <td colSpan="2">
                               <strong>${totalCobrarSupervisados}</strong>
                             </td>
                           </tr>
