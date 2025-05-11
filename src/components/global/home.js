@@ -52,81 +52,89 @@ const Home = () => {
   };
 
   const cargarDatosSuperAdmin = useCallback(async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("auth");
-      const mesActual = [
-        "enero", "febrero", "marzo", "abril", "mayo", "junio",
-        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
-      ][new Date().getMonth()];
-      
-      // Obtener cobros estimados del mes actual
-      const estimadosResponse = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      
-      // Obtener cobros reales del mes actual
-      const realesResponse = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      
-      // Calcular total estimado del mes
-      let totalEstimado = 0;
-      estimadosResponse.data.forEach(estimado => {
-        if (estimado.mes && estimado.mes.toLowerCase() === mesActual) {
-          totalEstimado += (estimado.bill || 0) + (estimado.notas || 0) + 
-                          (estimado.subir_notas || 0) + (estimado.open || 0) + 
-                          (estimado.spr || 0);
+  try {
+    setLoading(true);
+    setError(null);
+    const token = localStorage.getItem("auth");
+    
+    // Obtener el mes actual en formato texto (ej: "mayo")
+    const meses = [
+      "enero", "febrero", "marzo", "abril", "mayo", "junio",
+      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    ];
+    const nombreMesActual = meses[new Date().getMonth()];
+    
+    // Obtener todos los cobros estimados
+    const estimadosResponse = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    
+    // Obtener todos los cobros reales
+    const realesResponse = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro/", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    
+    // 1. Calcular total estimado del mes actual
+    let totalEstimado = 0;
+    estimadosResponse.data.forEach(estimado => {
+      // Verificar si el cobro estimado pertenece al mes actual
+      if (estimado.mes && estimado.mes.toLowerCase() === nombreMesActual) {
+        totalEstimado += (estimado.bill || 0) + (estimado.notas || 0) + 
+                        (estimado.subir_notas || 0) + (estimado.open || 0) + 
+                        (estimado.spr || 0);
+      }
+    });
+    
+    // 2. Calcular total real, pagado y deuda del mes actual
+    let totalReal = 0;
+    let pagado = 0;
+    let deuda = 0;
+    
+    realesResponse.data.forEach(cobro => {
+      // Verificar si el cobro real pertenece al mes actual
+      if (cobro.mes && cobro.mes.toLowerCase() === nombreMesActual) {
+        let unidades = 0;
+        
+        // Calcular unidades de los diferentes tipos de contenido
+        if (cobro.contenido?.length > 0) {
+          unidades += cobro.contenido.reduce((sum, r) => sum + (r.unidades || 0), 0);
         }
-      });
-      
-      // Calcular total real, pagado y deuda del mes
-      let totalReal = 0;
-      let pagado = 0;
-      let deuda = 0;
-      
-      realesResponse.data.forEach(cobro => {
-        if (cobro.mes && cobro.mes.toLowerCase() === mesActual) {
-          let unidades = 0;
-          
-          if (cobro.contenido?.length > 0) {
-            unidades += cobro.contenido.reduce((sum, r) => sum + (r.unidades || 0), 0);
-          }
-          if (cobro.contenido_open?.length > 0) {
-            unidades += cobro.contenido_open.reduce((sum, r) => sum + (r.unidades || 0), 0);
-          }
-          if (cobro.contenido_spr?.length > 0) {
-            unidades += cobro.contenido_spr.reduce((sum, r) => sum + (r.unidades || 0), 0);
-          }
-          if (unidades === 0 && cobro.unidades) {
-            unidades = cobro.unidades;
-          }
-          
-          const monto = unidades * 1;
-          totalReal += monto;
-          
-          if (cobro.pagado) {
-            pagado += monto;
-          } else {
-            deuda += monto;
-          }
+        if (cobro.contenido_open?.length > 0) {
+          unidades += cobro.contenido_open.reduce((sum, r) => sum + (r.unidades || 0), 0);
         }
-      });
-      
-      setResumenSuperAdmin({
-        totalEstimadoMes: totalEstimado.toFixed(2),
-        totalRealMes: totalReal.toFixed(2),
-        pagadoMes: pagado.toFixed(2),
-        deudaMes: deuda.toFixed(2)
-      });
-      
-    } catch (error) {
-      console.error("Error al cargar datos para SuperAdmin", error);
-      setError("No se pudieron cargar los datos financieros. Por favor, intente nuevamente más tarde.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        if (cobro.contenido_spr?.length > 0) {
+          unidades += cobro.contenido_spr.reduce((sum, r) => sum + (r.unidades || 0), 0);
+        }
+        if (unidades === 0 && cobro.unidades) {
+          unidades = cobro.unidades;
+        }
+        
+        const monto = unidades * 1; // Asumiendo $1 por unidad
+        totalReal += monto;
+        
+        if (cobro.pagado) {
+          pagado += monto;
+        } else {
+          deuda += monto;
+        }
+      }
+    });
+    
+    // Actualizar el estado con los datos calculados
+    setResumenSuperAdmin({
+      totalEstimadoMes: totalEstimado.toFixed(2),
+      totalRealMes: totalReal.toFixed(2),
+      pagadoMes: pagado.toFixed(2),
+      deudaMes: deuda.toFixed(2)
+    });
+    
+  } catch (error) {
+    console.error("Error al cargar datos para SuperAdmin", error);
+    setError("No se pudieron cargar los datos financieros. Por favor, intente nuevamente más tarde.");
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   const cargarDatosCobros = useCallback(async (userId) => {
     if (!userId) return;
