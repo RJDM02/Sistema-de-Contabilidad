@@ -522,7 +522,7 @@ const InsertarPagoCobros = () => {
   const handleResponse = (response) => {
     if (response.data && response.data.success) {
       toast.success('Cobro asignado correctamente al trabajador');
-      setTimeout(() => navigate('/gestPago/listarPagosCobros'), 1500);
+      setTimeout(() => navigate('/gestCobro/listarPagosCobros'), 1500);
     } else {
       throw new Error(response.data?.error || 'Error en la respuesta del servidor');
     }
