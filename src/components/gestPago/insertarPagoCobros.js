@@ -814,7 +814,7 @@ const InsertarPagoCobros = () => {
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => navigate('/gestCobro/listarPagosCobros')}
+                onClick={() => navigate('/gestPago/listarPagosCobros')}
                 disabled={submitting}
               >
                 Cancelar
