@@ -137,7 +137,6 @@ const PagosClientesSuperAdmin = () => {
       default: return 0;
     }
     
-    // Aplicar ajustes para este tipo de tarea
     const ajustes = documento.tareasAjustes.filter(t => 
       (t.tipo_tarea || t.cobro?.tarea) === tipoTarea
     );
@@ -163,92 +162,171 @@ const PagosClientesSuperAdmin = () => {
   };
 
   const procesarDatos = () => {
-  const clientesMap = new Map();
+    const clientesMap = new Map();
 
-  // Procesar documentos y clientes (igual que antes)
-  data.documentos.forEach(doc => {
-    if (!doc?.cliente) return;
-    const clienteId = doc.cliente.id_cliente || doc.cliente.id;
-    if (!clientesMap.has(clienteId)) {
-      clientesMap.set(clienteId, {
-        id: clienteId,
-        nombre: doc.cliente.nombre_cliente || doc.cliente.nombre || 'Cliente sin nombre',
-        documentos: new Map(),
-        totalEstimado: 0,
-        totalReal: 0,
-        pagado: 0,
-        fondo: doc.cliente.fondo || 0,
-        fecha_fondo: doc.cliente.fecha_fondo || null
-      });
-    }
-  });
+    // Procesar documentos y clientes
+    data.documentos.forEach(doc => {
+      if (!doc?.cliente) return;
+      const clienteId = doc.cliente.id_cliente || doc.cliente.id;
+      if (!clienteId) return;
 
-  // Procesar cobros estimados (calcular totalEstimado)
-  data.cobrosEstimados.forEach(estimado => {
-    if (!estimado.documento) return;
-    const docCompleto = data.documentos.find(d => d.id === estimado.documento.id);
-    if (!docCompleto?.cliente) return;
+      if (!clientesMap.has(clienteId)) {
+        clientesMap.set(clienteId, {
+          id: clienteId,
+          nombre: doc.cliente.nombre_cliente || doc.cliente.nombre || 'Cliente sin nombre',
+          agencias: doc.cliente.agencias || [],
+          documentos: new Map(),
+          totalEstimado: 0,
+          totalReal: 0,
+          deuda: 0,
+          pagado: 0,
+          deudaConFondo: 0,
+          fondo: doc.cliente.fondo || 0,
+          fecha_fondo: doc.cliente.fecha_fondo || null,
+          todasTareasPagadas: true
+        });
+      }
+    });
 
-    const clienteId = docCompleto.cliente.id_cliente || docCompleto.cliente.id;
-    const cliente = clientesMap.get(clienteId);
-    if (!cliente) return;
+    // Procesar cobros estimados
+    data.cobrosEstimados.forEach(estimado => {
+      if (!estimado.documento || !estimado.documento.id) return;
+      
+      const documentoCompleto = data.documentos.find(d => d.id === estimado.documento.id);
+      if (!documentoCompleto || !documentoCompleto.cliente) return;
+      
+      const clienteId = documentoCompleto.cliente.id_cliente || documentoCompleto.cliente.id;
+      const cliente = clientesMap.get(clienteId);
+      if (!cliente) return;
+      
+      const docId = estimado.documento.id;
+      
+      if (!cliente.documentos.has(docId)) {
+        const tareasAjustes = getTareasPorCobro(estimado.id);
+        
+        cliente.documentos.set(docId, {
+          id: docId,
+          nombre: estimado.documento.nombre || documentoCompleto.nombre_archivo || 'Documento sin nombre',
+          tareasReales: [],
+          tareasAjustes: tareasAjustes,
+          cobroEstimado: estimado,
+          totalEstimado: getTotalEstimadoConAjustes(estimado.id),
+          totalReal: 0,
+          deuda: 0,
+          pagado: 0,
+          todasPagadas: true,
+          valoresBase: {
+            notas: estimado.notas || 0,
+            subir_notas: estimado.subir_notas || 0,
+            bill: estimado.bill || 0,
+            open: estimado.open || 0,
+            spr: estimado.spr || 0
+          }
+        });
+        
+        cliente.totalEstimado += getTotalEstimadoConAjustes(estimado.id);
+      }
+    });
 
-    const docId = estimado.documento.id;
-    if (!cliente.documentos.has(docId)) {
-      const tareasAjustes = getTareasPorCobro(estimado.id);
-      const totalEstimado = getTotalEstimadoConAjustes(estimado.id);
+    // Procesar cobros reales
+    data.cobrosReales.forEach(cobro => {
+      if (!cobro.documento || !cobro.documento.id) return;
+      
+      const documentoCompleto = data.documentos.find(d => d.id === cobro.documento.id);
+      if (!documentoCompleto || !documentoCompleto.cliente) return;
+      
+      const clienteId = documentoCompleto.cliente.id_cliente || documentoCompleto.cliente.id;
+      let cliente = clientesMap.get(clienteId);
+      
+      if (!cliente) {
+        cliente = {
+          id: clienteId,
+          nombre: documentoCompleto.cliente.nombre_cliente || documentoCompleto.cliente.nombre || 'Cliente sin nombre',
+          agencias: documentoCompleto.cliente.agencias || [],
+          documentos: new Map(),
+          totalEstimado: 0,
+          totalReal: 0,
+          deuda: 0,
+          pagado: 0,
+          deudaConFondo: 0,
+          fondo: documentoCompleto.cliente.fondo || 0,
+          fecha_fondo: documentoCompleto.cliente.fecha_fondo || null,
+          todasTareasPagadas: true
+        };
+        clientesMap.set(clienteId, cliente);
+      }
+      
+      const docId = cobro.documento.id;
+      let documento = cliente.documentos.get(docId);
+      
+      if (!documento) {
+        documento = {
+          id: docId,
+          nombre: cobro.documento.nombre || documentoCompleto.nombre_archivo || 'Documento sin nombre',
+          tareasReales: [],
+          tareasAjustes: [],
+          cobroEstimado: null,
+          totalEstimado: 0,
+          totalReal: 0,
+          deuda: 0,
+          pagado: 0,
+          todasPagadas: true,
+          valoresBase: {
+            notas: 0,
+            subir_notas: 0,
+            bill: 0,
+            open: 0,
+            spr: 0
+          }
+        };
+        cliente.documentos.set(docId, documento);
+      }
+      
+      const unidades = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
+                      .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0);
+      const monto = unidades * 1;
 
-      cliente.documentos.set(docId, {
-        id: docId,
-        nombre: estimado.documento.nombre || 'Documento sin nombre',
-        tareasAjustes,
-        cobroEstimado: estimado,
-        totalEstimado,
-        pagado: 0
-      });
+      const tarea = {
+        id: cobro.id,
+        tipo_tarea: cobro.tipo_tarea,
+        tipo_nombre: getTipoTarea(cobro.tipo_tarea),
+        mes: cobro.mes || '',
+        unidades: unidades,
+        monto: monto,
+        contenido: [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])],
+        tieneContenido: (cobro.contenido?.length > 0) || (cobro.contenido_open?.length > 0) || (cobro.contenido_spr?.length > 0),
+        pagado: cobro.pagado || false
+      };
 
-      cliente.totalEstimado += totalEstimado; // Sumar al total del cliente
-    }
-  });
+      documento.tareasReales.push(tarea);
+      documento.totalReal += monto;
+      cliente.totalReal += monto;
 
-  // Procesar cobros reales (solo para calcular lo pagado)
-  data.cobrosReales.forEach(cobro => {
-    if (!cobro.documento) return;
-    const docCompleto = data.documentos.find(d => d.id === cobro.documento.id);
-    if (!docCompleto?.cliente) return;
+      if (cobro.pagado) {
+        documento.pagado += monto;
+        cliente.pagado += monto;
+      } else {
+        documento.deuda += monto;
+        cliente.deuda += monto;
+        documento.todasPagadas = false;
+        cliente.todasTareasPagadas = false;
+      }
+    });
 
-    const clienteId = docCompleto.cliente.id_cliente || docCompleto.cliente.id;
-    const cliente = clientesMap.get(clienteId);
-    if (!cliente) return;
-
-    const docId = cobro.documento.id;
-    const documento = cliente.documentos.get(docId) || {
-      id: docId,
-      nombre: cobro.documento.nombre || 'Documento sin nombre',
-      tareasAjustes: [],
-      cobroEstimado: null,
-      totalEstimado: 0,
-      pagado: 0
-    };
-
-    if (cobro.pagado) {
-      const monto = cobro.unidades * 1; // Asumiendo $1 por unidad
-      documento.pagado += monto;
-      cliente.pagado += monto;
-    }
-
-    cliente.documentos.set(docId, documento);
-  });
-
-  // Calcular deuda basada en estimados - pagado
-  clientesMap.forEach(cliente => {
-    cliente.deuda = Math.max(0, cliente.totalEstimado - cliente.pagado);
-    cliente.deudaConFondo = Math.max(0, cliente.deuda - (cliente.fondo || 0));
-  });
-
-  // Convertir a array y ordenar
-  return Array.from(clientesMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
-};
+    // Calcular deuda con fondo
+    clientesMap.forEach(cliente => {
+      cliente.deuda = Math.max(0, cliente.totalEstimado - cliente.pagado);
+      cliente.deudaConFondo = Math.max(0, cliente.deuda - (cliente.fondo || 0));
+    });
+    
+    // Convertir Maps a arrays y ordenar
+    return Array.from(clientesMap.values()).map(cliente => ({
+      ...cliente,
+      documentos: Array.from(cliente.documentos.values()).sort((a, b) => 
+        (a.nombre || '').localeCompare(b.nombre || '')
+      )
+    })).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  };
 
   const { clientesProcesados, clientesUnicos, totals } = useMemo(() => {
     if (loading || error) return { clientesProcesados: [], clientesUnicos: [], totals: {} };
@@ -520,7 +598,11 @@ const PagosClientesSuperAdmin = () => {
                       <td className="text-end">Total cliente:</td>
                       <td className="text-end">${cliente.totalEstimado.toFixed(2)}</td>
                       <td className="text-end">${cliente.totalReal.toFixed(2)}</td>
-                      <td></td>
+                      <td className="text-center">
+                        <span className={`badge ${cliente.todasTareasPagadas ? 'bg-success' : 'bg-warning'}`}>
+                          {cliente.todasTareasPagadas ? 'Pagado' : 'Pendiente'}
+                        </span>
+                      </td>
                       <td className="text-end text-danger fw-bold">
                         ${cliente.deudaConFondo.toFixed(2)} (${cliente.deuda.toFixed(2)})
                         {cliente.fondo > 0 && <div className="small">Fondo: ${cliente.fondo.toFixed(2)}</div>}
@@ -536,11 +618,20 @@ const PagosClientesSuperAdmin = () => {
                           style={{ cursor: 'pointer' }}
                         >
                           <td className="text-end">{idxCliente + 1}.{idxDoc + 1}</td>
-                          <td colSpan="3">{documento.nombre}</td>
+                          <td colSpan="3">
+                            {documento.nombre}
+                            <span className={`badge ms-2 ${documento.todasPagadas ? 'bg-success' : 'bg-warning'}`}>
+                              {documento.todasPagadas ? 'Pagado' : 'Pendiente'}
+                            </span>
+                          </td>
                           <td className="text-end">Total documento:</td>
                           <td className="text-end">${documento.totalEstimado.toFixed(2)}</td>
                           <td className="text-end">${documento.totalReal.toFixed(2)}</td>
-                          <td></td>
+                          <td className="text-center">
+                            <span className={`badge ${documento.todasPagadas ? 'bg-success' : 'bg-warning'}`}>
+                              {documento.todasPagadas ? 'Pagado' : 'Pendiente'}
+                            </span>
+                          </td>
                           <td className="text-end text-danger">${documento.deuda.toFixed(2)}</td>
                           <td className="text-end text-success">${documento.pagado.toFixed(2)}</td>
                         </tr>
@@ -552,7 +643,7 @@ const PagosClientesSuperAdmin = () => {
                           return (
                             <React.Fragment key={`real-${tarea.id}`}>
                               <tr className={tarea.pagado ? 'table-light' : 'table-warning'}>
-                                <td colSpan="3"></td>
+                                <td colSpan="4"></td>
                                 <td>
                                   {tarea.tipo_nombre} - {tarea.mes}
                                   {tarea.tieneContenido && renderContenidoDetalle(tarea.contenido, tarea.tipo_tarea)}
