@@ -175,7 +175,7 @@ const ModificarDocumentacion = () => {
                 onChange={handleChangeCheckbox}
               />
               <label htmlFor="es_bill" className="form-check-label">
-                ¿Es un documento Bill?
+                Hacemos el Bill
               </label>
             </div>
             
@@ -190,7 +190,7 @@ const ModificarDocumentacion = () => {
                 onChange={handleChangeCheckbox}
               />
               <label htmlFor="es_nota" className="form-check-label">
-                ¿Es un documento de Notas?
+                Se sube al Sistema
               </label>
             </div>
             
