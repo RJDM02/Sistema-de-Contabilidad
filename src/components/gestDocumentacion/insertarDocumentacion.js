@@ -348,7 +348,7 @@ const InsertarDocumentacion = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, bill: e.target.checked }))}
                 />
                 <label htmlFor="bill" className="form-check-label">
-                  ¿Es un documento Bill?
+                  Hacemos el Bill
                 </label>
               </div>
               
@@ -363,7 +363,7 @@ const InsertarDocumentacion = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, notas: e.target.checked }))}
                 />
                 <label htmlFor="notas" className="form-check-label">
-                  ¿Es un documento de Notas?
+                  Se sube al  Sistema
                 </label>
               </div>
               
@@ -383,7 +383,7 @@ const InsertarDocumentacion = () => {
                   required
                 />
                 <div className="form-text">
-                  Seleccione uno o más documentos a subir (formatos permitidos: .xls, .xlsx, .xlsm)
+                  Seleccione uno o más documentos a subir (formatos permitidos: .xls, .xlsx)
                 </div>
                 {formData.archivos.length > 0 && (
                   <div className="mt-2">
