@@ -163,87 +163,107 @@ const PagosClientesSuperAdmin = () => {
   };
 
   const procesarDatos = () => {
-    const clientesMap = new Map();
+  const clientesMap = new Map();
 
-    // Procesar cobros estimados primero
-    data.cobrosEstimados.forEach(estimado => {
-      if (!estimado.documento) return;
-      
-      const documentoCompleto = data.documentos.find(d => d.id === estimado.documento.id);
-      if (!documentoCompleto || !documentoCompleto.cliente) return;
-      
-      const clienteId = documentoCompleto.cliente.id;
-      const clienteNombre = documentoCompleto.cliente.nombre_cliente || documentoCompleto.cliente.nombre || 'Cliente sin nombre';
-      const agencias = documentoCompleto.cliente.agencias || [];
-      
-      if (!clientesMap.has(clienteId)) {
-        clientesMap.set(clienteId, {
-          id: clienteId,
-          nombre: clienteNombre,
-          agencias: agencias,
-          documentos: new Map(),
-          totalEstimado: 0,
-          totalReal: 0,
-          deuda: 0,
-          pagado: 0,
-          deudaConFondo: 0
-        });
-      }
-      
-      const cliente = clientesMap.get(clienteId);
-      const docId = estimado.documento.id;
-      
-      if (!cliente.documentos.has(docId)) {
-        const tareasAjustes = data.tareas.filter(t => t.cobro?.id === estimado.id);
-        
-        cliente.documentos.set(docId, {
-          id: docId,
-          nombre: estimado.documento.nombre || 'Documento sin nombre',
-          tareasReales: [],
-          tareasAjustes: tareasAjustes,
-          cobroEstimado: estimado,
-          totalEstimado: getTotalEstimadoConAjustes(estimado.id),
-          totalReal: 0,
-          deuda: 0,
-          pagado: 0,
-          // Guardamos los valores base por tipo
-          valoresBase: {
-            notas: estimado.notas || 0,
-            subir_notas: estimado.subir_notas || 0,
-            bill: estimado.bill || 0,
-            open: estimado.open || 0,
-            spr: estimado.spr || 0
-          }
-        });
-        
-        cliente.totalEstimado += getTotalEstimadoConAjustes(estimado.id);
-      }
-    });
+  // 1. Primero procesamos los documentos para tener la relación documento-cliente
+  data.documentos.forEach(doc => {
+    if (!doc || !doc.id || !doc.cliente) return;
 
-    // Procesar cobros reales
-    data.cobrosReales.forEach(cobro => {
-      if (!cobro.documento) return;
-      
-      const documentoCompleto = data.documentos.find(d => d.id === cobro.documento.id);
-      if (!documentoCompleto || !documentoCompleto.cliente) return;
-      
-      const clienteId = documentoCompleto.cliente.id;
-      const cliente = clientesMap.get(clienteId) || {
+    const clienteId = doc.cliente.id_cliente || doc.cliente.id;
+    if (!clienteId) return;
+
+    if (!clientesMap.has(clienteId)) {
+      clientesMap.set(clienteId, {
         id: clienteId,
-        nombre: documentoCompleto.cliente.nombre || 'Cliente sin nombre',
+        nombre: doc.cliente.nombre_cliente || doc.cliente.nombre || 'Cliente sin nombre',
+        agencias: doc.cliente.agencias || [],
+        documentos: new Map(),
+        totalEstimado: 0,
+        totalReal: 0,
+        deuda: 0,
+        pagado: 0,
+        deudaConFondo: 0,
+        fondo: doc.cliente.fondo || 0,
+        fecha_fondo: doc.cliente.fecha_fondo || null
+      });
+    }
+  });
+
+  // 2. Procesamos los cobros estimados
+  data.cobrosEstimados.forEach(estimado => {
+    if (!estimado.documento || !estimado.documento.id) return;
+    
+    const documentoCompleto = data.documentos.find(d => d.id === estimado.documento.id);
+    if (!documentoCompleto || !documentoCompleto.cliente) return;
+    
+    const clienteId = documentoCompleto.cliente.id_cliente || documentoCompleto.cliente.id;
+    const cliente = clientesMap.get(clienteId);
+    if (!cliente) return;
+    
+    const docId = estimado.documento.id;
+    
+    if (!cliente.documentos.has(docId)) {
+      const tareasAjustes = getTareasPorCobro(estimado.id);
+      
+      cliente.documentos.set(docId, {
+        id: docId,
+        nombre: estimado.documento.nombre || documentoCompleto.nombre_archivo || 'Documento sin nombre',
+        tareasReales: [],
+        tareasAjustes: tareasAjustes,
+        cobroEstimado: estimado,
+        totalEstimado: getTotalEstimadoConAjustes(estimado.id),
+        totalReal: 0,
+        deuda: 0,
+        pagado: 0,
+        valoresBase: {
+          notas: estimado.notas || 0,
+          subir_notas: estimado.subir_notas || 0,
+          bill: estimado.bill || 0,
+          open: estimado.open || 0,
+          spr: estimado.spr || 0
+        }
+      });
+      
+      cliente.totalEstimado += getTotalEstimadoConAjustes(estimado.id);
+    }
+  });
+
+  // 3. Procesamos los cobros reales
+  data.cobrosReales.forEach(cobro => {
+    if (!cobro.documento || !cobro.documento.id) return;
+    
+    const documentoCompleto = data.documentos.find(d => d.id === cobro.documento.id);
+    if (!documentoCompleto || !documentoCompleto.cliente) return;
+    
+    const clienteId = documentoCompleto.cliente.id_cliente || documentoCompleto.cliente.id;
+    let cliente = clientesMap.get(clienteId);
+    
+    // Si no existe el cliente (puede pasar con cobros reales sin estimado)
+    if (!cliente) {
+      cliente = {
+        id: clienteId,
+        nombre: documentoCompleto.cliente.nombre_cliente || documentoCompleto.cliente.nombre || 'Cliente sin nombre',
         agencias: documentoCompleto.cliente.agencias || [],
         documentos: new Map(),
         totalEstimado: 0,
         totalReal: 0,
         deuda: 0,
         pagado: 0,
-        deudaConFondo: 0
+        deudaConFondo: 0,
+        fondo: documentoCompleto.cliente.fondo || 0,
+        fecha_fondo: documentoCompleto.cliente.fecha_fondo || null
       };
-
-      const docId = cobro.documento.id;
-      const documento = cliente.documentos.get(docId) || {
+      clientesMap.set(clienteId, cliente);
+    }
+    
+    const docId = cobro.documento.id;
+    let documento = cliente.documentos.get(docId);
+    
+    // Si no existe el documento (puede pasar con cobros reales sin estimado)
+    if (!documento) {
+      documento = {
         id: docId,
-        nombre: cobro.documento.nombre || 'Documento sin nombre',
+        nombre: cobro.documento.nombre || documentoCompleto.nombre_archivo || 'Documento sin nombre',
         tareasReales: [],
         tareasAjustes: [],
         cobroEstimado: null,
@@ -259,56 +279,55 @@ const PagosClientesSuperAdmin = () => {
           spr: 0
         }
       };
-
-      const unidades = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
-                      .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0);
-      const monto = unidades * 1;
-
-      const tarea = {
-        id: cobro.id,
-        tipo_tarea: cobro.tipo_tarea,
-        tipo_nombre: getTipoTarea(cobro.tipo_tarea),
-        mes: cobro.mes || '',
-        unidades: unidades,
-        monto: monto,
-        contenido: [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])],
-        tieneContenido: (cobro.contenido?.length > 0) || (cobro.contenido_open?.length > 0) || (cobro.contenido_spr?.length > 0),
-        pagado: cobro.pagado || false
-      };
-
-      documento.tareasReales.push(tarea);
-      documento.totalReal += monto;
-      cliente.totalReal += monto;
-
-      if (cobro.pagado) {
-        documento.pagado += monto;
-        cliente.pagado += monto;
-      } else {
-        documento.deuda += monto;
-        cliente.deuda += monto;
-      }
-
       cliente.documentos.set(docId, documento);
-      clientesMap.set(clienteId, cliente);
-    });
+    }
+    
+    const unidades = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
+                    .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0);
+    const monto = unidades * 1;
 
-    // Calcular deuda con fondo
-    clientesMap.forEach(cliente => {
-      cliente.deudaConFondo = Math.max(0, cliente.deuda - (cliente.fondo || 0));
-    });
-    
-    const clientesArray = Array.from(clientesMap.values()).sort((a, b) => 
-      (a.nombre || '').localeCompare(b.nombre || '')
-    );
-    
-    clientesArray.forEach(cliente => {
-      cliente.documentos = Array.from(cliente.documentos.values()).sort((a, b) => 
+    const tarea = {
+      id: cobro.id,
+      tipo_tarea: cobro.tipo_tarea,
+      tipo_nombre: getTipoTarea(cobro.tipo_tarea),
+      mes: cobro.mes || '',
+      unidades: unidades,
+      monto: monto,
+      contenido: [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])],
+      tieneContenido: (cobro.contenido?.length > 0) || (cobro.contenido_open?.length > 0) || (cobro.contenido_spr?.length > 0),
+      pagado: cobro.pagado || false
+    };
+
+    documento.tareasReales.push(tarea);
+    documento.totalReal += monto;
+    cliente.totalReal += monto;
+
+    if (cobro.pagado) {
+      documento.pagado += monto;
+      cliente.pagado += monto;
+    } else {
+      documento.deuda += monto;
+      cliente.deuda += monto;
+    }
+  });
+
+  // Calcular deuda con fondo
+  clientesMap.forEach(cliente => {
+    cliente.deudaConFondo = Math.max(0, cliente.deuda - (cliente.fondo || 0));
+  });
+  
+  // Convertir Maps a arrays y ordenar
+  const clientesArray = Array.from(clientesMap.values()).map(cliente => {
+    return {
+      ...cliente,
+      documentos: Array.from(cliente.documentos.values()).sort((a, b) => 
         (a.nombre || '').localeCompare(b.nombre || '')
-      );
-    });
-    
-    return clientesArray;
-  };
+      )
+    };
+  }).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  
+  return clientesArray;
+};
 
   const { clientesProcesados, clientesUnicos, totals } = useMemo(() => {
     if (loading || error) return { clientesProcesados: [], clientesUnicos: [], totals: {} };
@@ -557,9 +576,8 @@ const PagosClientesSuperAdmin = () => {
                 <tr>
                   <th>#</th>
                   <th>Cliente</th>
-                  <th>Agencia(s)</th>
-                  <th>Documento</th>
-                  <th>Tipo Tarea</th>
+                  <th></th>
+                  <th></th>
                   <th className="text-end">Unidades</th>
                   <th className="text-end">Estimado</th>
                   <th className="text-end">Real</th>
@@ -577,13 +595,9 @@ const PagosClientesSuperAdmin = () => {
                       style={{ cursor: 'pointer' }}
                     >
                       <td className="text-center">{idxCliente + 1}</td>
-                      <td>{cliente.nombre}</td>
-                      <td>{Array.isArray(cliente.agencias) ? cliente.agencias.join(', ') : '-'}</td>
-                      <td colSpan="2" className="text-end">Total cliente:</td>
-                      <td className="text-end"></td>
-                      <td className="text-end">
-                        ${cliente.totalEstimado.toFixed(2)}
-                      </td>
+                      <td colSpan="3">{cliente.nombre}</td>
+                      <td className="text-end">Total cliente:</td>
+                      <td className="text-end">${cliente.totalEstimado.toFixed(2)}</td>
                       <td className="text-end">${cliente.totalReal.toFixed(2)}</td>
                       <td></td>
                       <td className="text-end text-danger fw-bold">
@@ -603,10 +617,7 @@ const PagosClientesSuperAdmin = () => {
                           <td className="text-end">{idxCliente + 1}.{idxDoc + 1}</td>
                           <td colSpan="3">{documento.nombre}</td>
                           <td className="text-end">Total documento:</td>
-                          <td className="text-end"></td>
-                          <td className="text-end">
-                            ${documento.totalEstimado.toFixed(2)}
-                          </td>
+                          <td className="text-end">${documento.totalEstimado.toFixed(2)}</td>
                           <td className="text-end">${documento.totalReal.toFixed(2)}</td>
                           <td></td>
                           <td className="text-end text-danger">${documento.deuda.toFixed(2)}</td>
@@ -669,7 +680,7 @@ const PagosClientesSuperAdmin = () => {
                                       <td className="text-end">
                                         {esSuma ? '+' : '-'}${unidades.toFixed(2)}
                                       </td>
-                                      <td colSpan="4"></td>
+                                      <td colSpan="3"></td>
                                     </tr>
                                   );
                                 })}
