@@ -160,7 +160,8 @@ const ComparativaTotalCobrar = () => {
           id: doc.cliente.id_cliente,
           nombre: doc.cliente.nombre_cliente,
           documentos: new Map(),
-          totalUnidades: 0, // Cambiado a totalUnidades
+          totalUnidades: 0, // Unidades de notas (estimados)
+          totalUnidadesReales: 0, // Unidades reales (pagos insertados)
           totalMonto: 0,
           totalEstimado: 0,
           totalAjustes: 0,
@@ -169,7 +170,7 @@ const ComparativaTotalCobrar = () => {
       }
     });
 
-    // Procesar cobros estimados para obtener unidades
+    // Procesar cobros estimados para obtener unidades de "notas"
     cobrosEstimados.forEach(estimado => {
       if (!estimado.documento || !estimado.documento.id) return;
       
@@ -192,7 +193,8 @@ const ComparativaTotalCobrar = () => {
         cliente.documentos.set(docId, {
           id: docId,
           nombre: documentoCompleto.nombre_archivo,
-          unidades: unidadesEstimadas, // Usamos las unidades de notas
+          unidades: unidadesEstimadas, // Unidades de notas (estimados)
+          unidadesReales: 0, // Se calculará con los pagos insertados
           tareasReales: [],
           tareasAjustes: tareasDoc,
           totalMonto: 0,
@@ -213,13 +215,13 @@ const ComparativaTotalCobrar = () => {
           tieneDiscrepancia: false
         });
         
-        cliente.totalUnidades += unidadesEstimadas; // Sumamos las unidades al cliente
+        cliente.totalUnidades += unidadesEstimadas;
         cliente.totalEstimado += getTotalEstimadoConAjustes(estimado.id);
         cliente.totalAjustes += totalAjustes;
       }
     });
 
-    // Procesar cobros reales (pagos insertados)
+    // Procesar cobros reales (pagos insertados) - Lógica original
     cobrosReales.forEach(cobro => {
       if (!cobro.documento || !cobro.documento.id) return;
       
@@ -234,22 +236,32 @@ const ComparativaTotalCobrar = () => {
       const documento = cliente.documentos.get(docId);
       if (!documento) return;
       
-      const monto = (cobro.unidades || 0) * 1;
+      // Lógica original de cálculo de unidades y montos
+      const unidadesContenido = [...(cobro.contenido || [])]
+                              .reduce((sum, item) => sum + (item.unidades || 0), 0);
+      
+      const unidadesTotales = unidadesContenido + (cobro.unidades || 0);
+      const monto = unidadesTotales * 1;
       
       const tarea = {
         id: cobro.id,
         tipo_tarea: cobro.tipo_tarea,
         tipo_nombre: getTipoTarea(cobro.tipo_tarea),
         mes: cobro.mes,
-        unidades: cobro.unidades || 0,
+        unidades: unidadesTotales,
+        unidadesContenido: unidadesContenido,
         monto: monto,
+        contenido: [...(cobro.contenido || [])],
+        tieneContenido: unidadesContenido > 0,
         esReal: true
       };
       
       documento.tareasReales.push(tarea);
+      documento.unidadesReales += unidadesTotales; // Sumamos unidades reales
       documento.totalMonto += monto;
       documento.tienePagosInsertados = true;
       
+      cliente.totalUnidadesReales += unidadesTotales;
       cliente.totalMonto += monto;
     });
 
@@ -293,6 +305,7 @@ const ComparativaTotalCobrar = () => {
   const totalAjustes = datosProcesados.reduce((sum, c) => sum + c.totalAjustes, 0);
   const totalDiscrepancias = datosProcesados.reduce((sum, c) => sum + c.totalDiscrepancias, 0);
   const totalUnidades = datosProcesados.reduce((sum, c) => sum + c.totalUnidades, 0);
+  const totalUnidadesReales = datosProcesados.reduce((sum, c) => sum + c.totalUnidadesReales, 0);
 
   return (
     <div className="container-fluid mt-3">
@@ -459,6 +472,9 @@ const ComparativaTotalCobrar = () => {
                                 <td colSpan="2"></td>
                                 <td>
                                   {getTipoTarea(tarea.tipo_tarea)} - {tarea.mes}
+                                  {tarea.tieneContenido && (
+                                    <span className="ms-2 badge bg-secondary">Detalle</span>
+                                  )}
                                 </td>
                                 <td className="text-end">-</td>
                                 <td className="text-end">${tarea.monto.toFixed(2)}</td>
