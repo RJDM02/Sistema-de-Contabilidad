@@ -351,10 +351,10 @@ const ComparativaTotalCobrar = () => {
           <h3 className="m-0">Comparativa Total a Cobrar</h3>
           <div>
             <span className="badge bg-info me-2">Clientes: {datosProcesados.length}</span>
-            <span className="badge bg-primary me-2">Pagos: ${totalMonto.toFixed(2)}</span>
-            <span className="badge bg-warning me-2">Estimado: ${totalEstimado.toFixed(2)}</span>
-            <span className={`badge ${totalAjustes >= 0 ? 'bg-success' : 'bg-danger'}`}>
-              Ajustes: ${totalAjustes.toFixed(2)}
+            <span className="badge bg-primary me-2">Pagos: {totalMonto.toFixed(2)}</span>
+            <span className="badge bg-warning me-2">Estimado: {totalEstimado.toFixed(2)}</span>
+            <span className={`badge {totalAjustes >= 0 ? 'bg-success' : 'bg-danger'}`}>
+              Ajustes: {totalAjustes.toFixed(2)}
             </span>
             {totalDiscrepancias > 0 && (
               <span className="badge bg-danger">Discrepancias: {totalDiscrepancias}</span>
@@ -372,7 +372,7 @@ const ComparativaTotalCobrar = () => {
                   <th>Cliente</th>
                   <th>Documento</th>
                   <th>Tipo Tarea</th>
-                  <th>Unidades (Contenido)</th>
+                  <th>Unidades Bill</th>
                   <th>Pagos Insertados</th>
                   <th>Cobros Estimados</th>
                   <th>Acciones</th>
@@ -390,12 +390,12 @@ const ComparativaTotalCobrar = () => {
                       <td colSpan="2">{cliente.nombre}</td>
                       <td className="text-end">Total cliente:</td>
                       <td className="text-end">{cliente.totalUnidadesContenido}</td>
-                      <td className="text-end">${cliente.totalMonto.toFixed(2)}</td>
+                      <td className="text-end">{cliente.totalMonto.toFixed(2)}</td>
                       <td className="text-end">
-                        ${cliente.totalEstimado.toFixed(2)}
+                        {cliente.totalEstimado.toFixed(2)}
                         {cliente.totalAjustes !== 0 && (
                           <div className={`small ${cliente.totalAjustes >= 0 ? 'text-success' : 'text-danger'}`}>
-                            (Base: ${(cliente.totalEstimado - cliente.totalAjustes).toFixed(2)})
+                            (Base: {(cliente.totalEstimado - cliente.totalAjustes).toFixed(2)})
                           </div>
                         )}
                         {cliente.totalDiscrepancias > 0 && (
@@ -419,12 +419,12 @@ const ComparativaTotalCobrar = () => {
                           <td>{documento.nombre}</td>
                           <td className="text-end">Total documento:</td>
                           <td className="text-end">{documento.totalUnidadesContenido}</td>
-                          <td className="text-end">${documento.totalMonto.toFixed(2)}</td>
+                          <td className="text-end">{documento.totalMonto.toFixed(2)}</td>
                           <td className="text-end">
-                            ${documento.totalEstimado.toFixed(2)}
+                            {documento.totalEstimado.toFixed(2)}
                             {documento.totalAjustes !== 0 && (
                               <div className={`small ${documento.totalAjustes >= 0 ? 'text-success' : 'text-danger'}`}>
-                                (Base: ${documento.totalEstimadoBase.toFixed(2)})
+                                (Base: {documento.totalEstimadoBase.toFixed(2)})
                               </div>
                             )}
                             {documento.tieneDiscrepancia && (
@@ -475,7 +475,7 @@ const ComparativaTotalCobrar = () => {
                                 <td className="text-end">
                                   {tarea.tieneContenido ? tarea.unidadesContenido : '-'}
                                 </td>
-                                <td className="text-end">${tarea.monto.toFixed(2)}</td>
+                                <td className="text-end">{tarea.monto.toFixed(2)}</td>
                                 <td className="text-end">
                                   {/* Mostrar el valor estimado correspondiente al tipo de tarea */}
                                   {tarea.tipo_tarea === 1 && documento.estimados.notas.toFixed(2)}
@@ -506,7 +506,7 @@ const ComparativaTotalCobrar = () => {
                                   <td></td>
                                   <td className="text-end">-</td>
                                   <td className="text-end">
-                                    {esSuma ? '+' : '-'}${unidades.toFixed(2)}
+                                    {esSuma ? '+' : '-'}{unidades.toFixed(2)}
                                   </td>
                                   <td className="text-end">
                                     {/* Mostrar el valor estimado correspondiente al tipo de tarea */}
@@ -545,7 +545,7 @@ const ComparativaTotalCobrar = () => {
               <strong className="me-3">Total pagos: {totalMonto.toFixed(2)}</strong>
               <strong className="text-warning me-3">Total estimado: {totalEstimado.toFixed(2)}</strong>
               <strong className={totalAjustes >= 0 ? 'text-success' : 'text-danger'}>
-                Total ajustes: ${totalAjustes.toFixed(2)}
+                Total ajustes: {totalAjustes.toFixed(2)}
               </strong>
               <strong className="text-secondary ms-3">Unidades Contenido: {totalUnidadesContenido}</strong>
             </div>
