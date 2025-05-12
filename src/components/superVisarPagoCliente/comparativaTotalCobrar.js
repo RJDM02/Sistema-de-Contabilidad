@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Modal, Button, Form } from 'react-bootstrap';
+import { Modal, Button, Form, Table } from 'react-bootstrap';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const ComparativaTotalCobrar = () => {
   const [cobrosEstimados, setCobrosEstimados] = useState([]);
@@ -28,6 +30,9 @@ const ComparativaTotalCobrar = () => {
   const fetchData = async () => {
     const token = localStorage.getItem("auth");
     try {
+      setLoading(true);
+      setError(null);
+      
       const [estimadosRes, realesRes, tareasRes, documentosRes] = await Promise.all([
         axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/', {
           headers: { Authorization: `Bearer ${token}` }
@@ -47,9 +52,10 @@ const ComparativaTotalCobrar = () => {
       setCobrosReales(realesRes.data);
       setTareas(tareasRes.data);
       setDocumentos(documentosRes.data);
-      setLoading(false);
     } catch (err) {
       setError(err.message);
+      toast.error("Error al cargar los datos");
+    } finally {
       setLoading(false);
     }
   };
@@ -133,45 +139,47 @@ const ComparativaTotalCobrar = () => {
         dataToSend,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      
+      toast.success("Operación registrada correctamente");
       fetchData();
       setShowModal(false);
     } catch (err) {
-      alert("Error al guardar operación: " + (err.response?.data?.message || err.message));
+      toast.error("Error al guardar operación: " + (err.response?.data?.message || err.message));
     }
-  };
-
-  const tieneDiscrepancia = (documento) => {
-    if (!documento.tienePagosInsertados) return false;
-    const estimado = documento.totalEstimado;
-    const real = documento.totalMonto;
-    return Math.abs(estimado - real) > 0.01;
   };
 
   const procesarDatos = () => {
     const clientesMap = new Map();
 
-    cobrosEstimados.forEach(estimado => {
-      if (!estimado.documento) return;
-      
-      const documentoCompleto = documentos.find(d => d.id === estimado.documento.id);
-      if (!documentoCompleto) return;
-      
-      const clienteId = documentoCompleto.cliente.id;
-      
-      if (!clientesMap.has(clienteId)) {
-        clientesMap.set(clienteId, {
-          id: clienteId,
-          nombre: documentoCompleto.cliente.nombre_cliente,
+    // Procesar documentos para obtener relación documento-cliente
+    documentos.forEach(doc => {
+      if (!doc || !doc.id || !doc.cliente) return;
+
+      if (!clientesMap.has(doc.cliente.id_cliente)) {
+        clientesMap.set(doc.cliente.id_cliente, {
+          id: doc.cliente.id_cliente,
+          nombre: doc.cliente.nombre_cliente,
           documentos: new Map(),
-          totalUnidades: 0,
+          totalUnidadesContenido: 0, // Nuevo campo para unidades de contenido
           totalMonto: 0,
           totalEstimado: 0,
           totalAjustes: 0,
           totalDiscrepancias: 0
         });
       }
+    });
+
+    // Procesar cobros estimados
+    cobrosEstimados.forEach(estimado => {
+      if (!estimado.documento || !estimado.documento.id) return;
       
+      const documentoCompleto = documentos.find(d => d.id === estimado.documento.id);
+      if (!documentoCompleto || !documentoCompleto.cliente) return;
+      
+      const clienteId = documentoCompleto.cliente.id_cliente;
       const cliente = clientesMap.get(clienteId);
+      if (!cliente) return;
+      
       const docId = estimado.documento.id;
       
       if (!cliente.documentos.has(docId)) {
@@ -180,12 +188,11 @@ const ComparativaTotalCobrar = () => {
         
         cliente.documentos.set(docId, {
           id: docId,
-          nombre: estimado.documento.nombre,
+          nombre: documentoCompleto.nombre_archivo,
           tareasReales: [],
           tareasAjustes: tareasDoc,
-          totalUnidades: 0,
+          totalUnidadesContenido: 0, // Nuevo campo para unidades de contenido
           totalMonto: 0,
-          // Store individual values to reference later
           estimados: {
             bill: estimado.bill || 0,
             notas: estimado.notas || 0,
@@ -193,7 +200,8 @@ const ComparativaTotalCobrar = () => {
             open: estimado.open || 0,
             spr: estimado.spr || 0
           },
-          totalEstimadoBase: (estimado.bill || 0) + (estimado.notas || 0) + (estimado.subir_notas || 0) + (estimado.open || 0) + (estimado.spr || 0),
+          totalEstimadoBase: (estimado.bill || 0) + (estimado.notas || 0) + (estimado.subir_notas || 0) + 
+                           (estimado.open || 0) + (estimado.spr || 0),
           totalAjustes: totalAjustes,
           cobroEstimadoId: estimado.id,
           totalEstimado: getTotalEstimadoConAjustes(estimado.id),
@@ -206,13 +214,14 @@ const ComparativaTotalCobrar = () => {
       }
     });
 
+    // Procesar cobros reales
     cobrosReales.forEach(cobro => {
-      if (!cobro.documento) return;
+      if (!cobro.documento || !cobro.documento.id) return;
       
       const documentoCompleto = documentos.find(d => d.id === cobro.documento.id);
-      if (!documentoCompleto) return;
+      if (!documentoCompleto || !documentoCompleto.cliente) return;
       
-      const clienteId = documentoCompleto.cliente.id;
+      const clienteId = documentoCompleto.cliente.id_cliente;
       const cliente = clientesMap.get(clienteId);
       if (!cliente) return;
       
@@ -220,53 +229,53 @@ const ComparativaTotalCobrar = () => {
       const documento = cliente.documentos.get(docId);
       if (!documento) return;
       
-      const unidades = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
-                      .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0);
-      const monto = unidades * 1;
+      // Calcular unidades de contenido
+      const unidadesContenido = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
+                              .reduce((sum, item) => sum + (item.unidades || 0), 0);
+      
+      const unidadesTotales = unidadesContenido + (cobro.unidades || 0);
+      const monto = unidadesTotales * 1;
       
       const tarea = {
         id: cobro.id,
         tipo_tarea: cobro.tipo_tarea,
         tipo_nombre: getTipoTarea(cobro.tipo_tarea),
         mes: cobro.mes,
-        unidades: unidades,
+        unidades: unidadesTotales,
+        unidadesContenido: unidadesContenido, // Nuevo campo
         monto: monto,
         contenido: [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])],
-        tieneContenido: (cobro.contenido?.length > 0) || 
-                       (cobro.contenido_open?.length > 0) || 
-                       (cobro.contenido_spr?.length > 0),
+        tieneContenido: unidadesContenido > 0,
         esReal: true
       };
       
       documento.tareasReales.push(tarea);
-      documento.totalUnidades += unidades;
+      documento.totalUnidadesContenido += unidadesContenido; // Solo sumamos contenido
       documento.totalMonto += monto;
       documento.tienePagosInsertados = true;
       
-      cliente.totalUnidades += unidades;
+      cliente.totalUnidadesContenido += unidadesContenido; // Solo sumamos contenido
       cliente.totalMonto += monto;
     });
 
-    clientesMap.forEach(cliente => {
-      cliente.documentos.forEach(documento => {
-        documento.tieneDiscrepancia = tieneDiscrepancia(documento);
-        if (documento.tieneDiscrepancia) {
-          cliente.totalDiscrepancias++;
-        }
+    // Calcular discrepancias y convertir Maps a arrays
+    const clientesArray = Array.from(clientesMap.values()).map(cliente => {
+      let discrepancias = 0;
+      const docsArray = Array.from(cliente.documentos.values());
+      
+      docsArray.forEach(doc => {
+        doc.tieneDiscrepancia = Math.abs(doc.totalMonto - doc.totalEstimado) > 0.01;
+        if (doc.tieneDiscrepancia) discrepancias++;
       });
+      
+      return {
+        ...cliente,
+        documentos: docsArray,
+        totalDiscrepancias: discrepancias
+      };
     });
-    
-    const clientesArray = Array.from(clientesMap.values()).sort((a, b) => 
-      a.nombre.localeCompare(b.nombre)
-    );
-    
-    clientesArray.forEach(cliente => {
-      cliente.documentos = Array.from(cliente.documentos.values()).sort((a, b) => 
-        a.nombre.localeCompare(b.nombre)
-      );
-    });
-    
-    return clientesArray;
+
+    return clientesArray.sort((a, b) => a.nombre.localeCompare(b.nombre));
   };
 
   if (loading) return (
@@ -288,6 +297,7 @@ const ComparativaTotalCobrar = () => {
   const totalEstimado = datosProcesados.reduce((sum, c) => sum + c.totalEstimado, 0);
   const totalAjustes = datosProcesados.reduce((sum, c) => sum + c.totalAjustes, 0);
   const totalDiscrepancias = datosProcesados.reduce((sum, c) => sum + c.totalDiscrepancias, 0);
+  const totalUnidadesContenido = datosProcesados.reduce((sum, c) => sum + c.totalUnidadesContenido, 0);
 
   return (
     <div className="container-fluid mt-3">
@@ -334,6 +344,8 @@ const ComparativaTotalCobrar = () => {
         </Modal.Footer>
       </Modal>
 
+      <ToastContainer position="top-right" autoClose={3000} />
+
       <div className="card shadow">
         <div className="card-header bg-dark text-white d-flex justify-content-between align-items-center">
           <h3 className="m-0">Comparativa Total a Cobrar</h3>
@@ -347,8 +359,10 @@ const ComparativaTotalCobrar = () => {
             {totalDiscrepancias > 0 && (
               <span className="badge bg-danger">Discrepancias: {totalDiscrepancias}</span>
             )}
+            <span className="badge bg-secondary ms-2">Unidades Contenido: {totalUnidadesContenido}</span>
           </div>
         </div>
+        
         <div className="card-body p-0">
           <div className="table-responsive">
             <table className="table table-bordered table-hover mb-0">
@@ -358,7 +372,7 @@ const ComparativaTotalCobrar = () => {
                   <th>Cliente</th>
                   <th>Documento</th>
                   <th>Tipo Tarea</th>
-                  <th>Unidades</th>
+                  <th>Unidades (Contenido)</th>
                   <th>Pagos Insertados</th>
                   <th>Cobros Estimados</th>
                   <th>Acciones</th>
@@ -375,7 +389,7 @@ const ComparativaTotalCobrar = () => {
                       <td className="text-center">{idxCliente + 1}</td>
                       <td colSpan="2">{cliente.nombre}</td>
                       <td className="text-end">Total cliente:</td>
-                      <td className="text-end">{cliente.totalUnidades}</td>
+                      <td className="text-end">{cliente.totalUnidadesContenido}</td>
                       <td className="text-end">${cliente.totalMonto.toFixed(2)}</td>
                       <td className="text-end">
                         ${cliente.totalEstimado.toFixed(2)}
@@ -404,7 +418,7 @@ const ComparativaTotalCobrar = () => {
                           <td colSpan="1"></td>
                           <td>{documento.nombre}</td>
                           <td className="text-end">Total documento:</td>
-                          <td className="text-end">{documento.totalUnidades}</td>
+                          <td className="text-end">{documento.totalUnidadesContenido}</td>
                           <td className="text-end">${documento.totalMonto.toFixed(2)}</td>
                           <td className="text-end">
                             ${documento.totalEstimado.toFixed(2)}
@@ -458,7 +472,9 @@ const ComparativaTotalCobrar = () => {
                                   )}
                                 </td>
                                 <td></td>
-                                <td className="text-end">{tarea.unidades}</td>
+                                <td className="text-end">
+                                  {tarea.tieneContenido ? tarea.unidadesContenido : '-'}
+                                </td>
                                 <td className="text-end">${tarea.monto.toFixed(2)}</td>
                                 <td className="text-end">
                                   {/* Mostrar el valor estimado correspondiente al tipo de tarea */}
@@ -488,7 +504,7 @@ const ComparativaTotalCobrar = () => {
                                     {getTipoTarea(tipoTarea)} ({esSuma ? 'Suma' : 'Resta'})
                                   </td>
                                   <td></td>
-                                  <td className="text-end">{unidades}</td>
+                                  <td className="text-end">-</td>
                                   <td className="text-end">
                                     {esSuma ? '+' : '-'}${unidades.toFixed(2)}
                                   </td>
@@ -514,6 +530,7 @@ const ComparativaTotalCobrar = () => {
             </table>
           </div>
         </div>
+        
         <div className="card-footer bg-light">
           <div className="row align-items-center">
             <div className="col-md-4">
@@ -530,6 +547,7 @@ const ComparativaTotalCobrar = () => {
               <strong className={totalAjustes >= 0 ? 'text-success' : 'text-danger'}>
                 Total ajustes: ${totalAjustes.toFixed(2)}
               </strong>
+              <strong className="text-secondary ms-3">Unidades Contenido: {totalUnidadesContenido}</strong>
             </div>
           </div>
         </div>
