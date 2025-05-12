@@ -631,7 +631,7 @@ const PagosClientesSuperAdmin = () => {
                           return (
                             <React.Fragment key={`real-${tarea.id}`}>
                               <tr className={tarea.pagado ? 'table-light' : 'table-warning'}>
-                                <td colSpan="4"></td>
+                                <td colSpan="3"></td>
                                 <td>
                                   {tarea.tipo_nombre} - {tarea.mes}
                                   {tarea.tieneContenido && renderContenidoDetalle(tarea.contenido, tarea.tipo_tarea)}
