@@ -542,8 +542,8 @@ const ComparativaTotalCobrar = () => {
               )}
             </div>
             <div className="col-md-8 text-md-end">
-              <strong className="me-3">Total pagos: ${totalMonto.toFixed(2)}</strong>
-              <strong className="text-warning me-3">Total estimado: ${totalEstimado.toFixed(2)}</strong>
+              <strong className="me-3">Total pagos: {totalMonto.toFixed(2)}</strong>
+              <strong className="text-warning me-3">Total estimado: {totalEstimado.toFixed(2)}</strong>
               <strong className={totalAjustes >= 0 ? 'text-success' : 'text-danger'}>
                 Total ajustes: ${totalAjustes.toFixed(2)}
               </strong>
