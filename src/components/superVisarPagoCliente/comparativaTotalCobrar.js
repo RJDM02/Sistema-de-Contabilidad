@@ -95,13 +95,8 @@ const ComparativaTotalCobrar = () => {
   };
 
   const calcularUnidadesContenido = (documento) => {
-    // Extraer unidades de contenido del documento
-    if (!documento.contenido) return 0;
-    
-    return [...(documento.contenido || []), 
-           ...(documento.contenido_open || []), 
-           ...(documento.contenido_spr || [])]
-         .reduce((sum, item) => sum + (item.unidades || 0), 0);
+    if (!documento || !documento.contenido || !Array.isArray(documento.contenido)) return 0;
+    return documento.contenido.reduce((sum, item) => sum + (item.unidades || 0), 0);
   };
 
   const toggleCliente = (clienteId) => {
@@ -165,6 +160,8 @@ const ComparativaTotalCobrar = () => {
     documentos.forEach(doc => {
       if (!doc || !doc.id || !doc.cliente) return;
 
+      const unidadesContenido = calcularUnidadesContenido(doc);
+      
       if (!clientesMap.has(doc.cliente.id_cliente)) {
         clientesMap.set(doc.cliente.id_cliente, {
           id: doc.cliente.id_cliente,
@@ -179,7 +176,6 @@ const ComparativaTotalCobrar = () => {
       }
 
       const cliente = clientesMap.get(doc.cliente.id_cliente);
-      const unidadesContenido = calcularUnidadesContenido(doc);
       
       cliente.documentos.set(doc.id, {
         id: doc.id,
@@ -249,28 +245,15 @@ const ComparativaTotalCobrar = () => {
       const documento = cliente.documentos.get(docId);
       if (!documento) return;
       
-      const unidadesTotales = (cobro.unidades || 0) + 
-                            [...(cobro.contenido || []), 
-                             ...(cobro.contenido_open || []), 
-                             ...(cobro.contenido_spr || [])]
-                           .reduce((sum, item) => sum + (item.unidades || 0), 0);
-      const monto = unidadesTotales * 1;
+      const monto = (cobro.unidades || 0) * 1;
       
       const tarea = {
         id: cobro.id,
         tipo_tarea: cobro.tipo_tarea,
         tipo_nombre: getTipoTarea(cobro.tipo_tarea),
         mes: cobro.mes,
-        unidades: unidadesTotales,
-        unidadesContenido: [...(cobro.contenido || []), 
-                           ...(cobro.contenido_open || []), 
-                           ...(cobro.contenido_spr || [])]
-                         .reduce((sum, item) => sum + (item.unidades || 0), 0),
+        unidades: cobro.unidades || 0,
         monto: monto,
-        contenido: [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])],
-        tieneContenido: (cobro.contenido?.length > 0) || 
-                       (cobro.contenido_open?.length > 0) || 
-                       (cobro.contenido_spr?.length > 0),
         esReal: true
       };
       
@@ -393,7 +376,6 @@ const ComparativaTotalCobrar = () => {
                 <tr>
                   <th>#</th>
                   <th>Cliente</th>
-                  <th>Documento</th>
                   <th>Unidades</th>
                   <th>Pagos Insertados</th>
                   <th>Cobros Estimados</th>
@@ -409,7 +391,7 @@ const ComparativaTotalCobrar = () => {
                       style={{ cursor: 'pointer' }}
                     >
                       <td className="text-center">{idxCliente + 1}</td>
-                      <td colSpan="2">{cliente.nombre}</td>
+                      <td>{cliente.nombre}</td>
                       <td className="text-end">{cliente.totalUnidadesContenido}</td>
                       <td className="text-end">${cliente.totalMonto.toFixed(2)}</td>
                       <td className="text-end">
@@ -436,8 +418,7 @@ const ComparativaTotalCobrar = () => {
                           style={{ cursor: 'pointer' }}
                         >
                           <td className="text-end">{idxCliente + 1}.{idxDoc + 1}</td>
-                          <td colSpan="1"></td>
-                          <td>{documento.nombre}</td>
+                          <td colSpan="1">{documento.nombre}</td>
                           <td className="text-end">{documento.unidadesContenido}</td>
                           <td className="text-end">${documento.totalMonto.toFixed(2)}</td>
                           <td className="text-end">
@@ -479,65 +460,24 @@ const ComparativaTotalCobrar = () => {
                           </td>
                         </tr>
                         
-                        {expandedDocumentos[documento.id] && (
-                          <>
-                            {/* Mostrar cobros reales */}
-                            {documento.tareasReales.map((tarea) => (
-                              <tr key={`real-${tarea.id}`} className="table-light">
-                                <td colSpan="2"></td>
-                                <td>
-                                  {getTipoTarea(tarea.tipo_tarea)} - {tarea.mes}
-                                  {tarea.tieneContenido && (
-                                    <span className="ms-2 badge bg-secondary">Detalle</span>
-                                  )}
-                                </td>
-                                <td className="text-end">
-                                  {tarea.tieneContenido ? tarea.unidadesContenido : '-'}
-                                </td>
-                                <td className="text-end">${tarea.monto.toFixed(2)}</td>
-                                <td className="text-end">
-                                  {tarea.tipo_tarea === 1 && documento.estimados.notas.toFixed(2)}
-                                  {tarea.tipo_tarea === 2 && documento.estimados.subir_notas.toFixed(2)}
-                                  {tarea.tipo_tarea === 3 && documento.estimados.bill.toFixed(2)}
-                                  {tarea.tipo_tarea === 4 && documento.estimados.open.toFixed(2)}
-                                  {tarea.tipo_tarea === 5 && documento.estimados.spr.toFixed(2)}
-                                </td>
-                                <td></td>
-                              </tr>
-                            ))}
-
-                            {/* Mostrar ajustes manuales */}
-                            {documento.tareasAjustes.map((tarea) => {
-                              const tipoTarea = tarea.tipo_tarea || tarea.cobro?.tarea;
-                              const esSuma = tarea.cobro?.suma > 0;
-                              const unidades = esSuma ? tarea.cobro.suma : tarea.cobro.restar;
-                              
-                              return (
-                                <tr 
-                                  key={`ajuste-${tarea.id}`} 
-                                  className={esSuma ? 'table-success' : 'table-danger'}
-                                >
-                                  <td colSpan="2"></td>
-                                  <td>
-                                    {getTipoTarea(tipoTarea)} ({esSuma ? 'Suma' : 'Resta'})
-                                  </td>
-                                  <td className="text-end">-</td>
-                                  <td className="text-end">
-                                    {esSuma ? '+' : '-'}${unidades.toFixed(2)}
-                                  </td>
-                                  <td className="text-end">
-                                    {tipoTarea === 1 && documento.estimados.notas.toFixed(2)}
-                                    {tipoTarea === 2 && documento.estimados.subir_notas.toFixed(2)}
-                                    {tipoTarea === 3 && documento.estimados.bill.toFixed(2)}
-                                    {tipoTarea === 4 && documento.estimados.open.toFixed(2)}
-                                    {tipoTarea === 5 && documento.estimados.spr.toFixed(2)}
-                                  </td>
-                                  <td></td>
-                                </tr>
-                              );
-                            })}
-                          </>
-                        )}
+                        {expandedDocumentos[documento.id] && documento.tareasReales.map((tarea) => (
+                          <tr key={`real-${tarea.id}`} className="table-light">
+                            <td colSpan="2"></td>
+                            <td>
+                              {getTipoTarea(tarea.tipo_tarea)} - {tarea.mes}
+                            </td>
+                            <td className="text-end">-</td>
+                            <td className="text-end">${tarea.monto.toFixed(2)}</td>
+                            <td className="text-end">
+                              {tarea.tipo_tarea === 1 && documento.estimados.notas.toFixed(2)}
+                              {tarea.tipo_tarea === 2 && documento.estimados.subir_notas.toFixed(2)}
+                              {tarea.tipo_tarea === 3 && documento.estimados.bill.toFixed(2)}
+                              {tarea.tipo_tarea === 4 && documento.estimados.open.toFixed(2)}
+                              {tarea.tipo_tarea === 5 && documento.estimados.spr.toFixed(2)}
+                            </td>
+                            <td></td>
+                          </tr>
+                        ))}
                       </React.Fragment>
                     ))}
                   </React.Fragment>
@@ -551,8 +491,6 @@ const ComparativaTotalCobrar = () => {
           <div className="row align-items-center">
             <div className="col-md-4">
               <span className="badge bg-primary me-2">Cliente</span>
-              <span className="badge bg-info me-2">Documento</span>
-              <span className="badge bg-light text-dark border">Tarea</span>
               {totalDiscrepancias > 0 && (
                 <span className="badge bg-danger">Discrepancias: {totalDiscrepancias}</span>
               )}
