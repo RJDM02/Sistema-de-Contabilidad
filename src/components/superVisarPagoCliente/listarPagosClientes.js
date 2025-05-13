@@ -178,12 +178,12 @@ const PagosClientesSuperAdmin = () => {
           documentos: new Map(),
           totalEstimado: 0,
           totalReal: 0,
-          saldo: 0, // Cambiamos deuda por saldo (puede ser positivo o negativo)
+          saldo: 0,
           totalPagado: 0,
           todasTareasPagadas: true,
           fondo: doc.cliente.fondo || 0,
           fecha_fondo: doc.cliente.fecha_fondo || null,
-          estado: 'Pendiente' // Nuevo campo para estado general
+          estado: 'Pendiente'
         });
       }
     });
@@ -213,10 +213,10 @@ const PagosClientesSuperAdmin = () => {
           cobroEstimado: estimado,
           totalEstimado: totalEstimado,
           totalReal: 0,
-          saldo: -totalEstimado, // Inicialmente negativo (lo que debe)
+          saldo: -totalEstimado,
           pagado: 0,
-          estado: 'Pendiente', // Estado inicial
-          todasPagadas: false, // Inicialmente no pagado
+          estado: 'Pendiente',
+          todasPagadas: false,
           valoresBase: {
             notas: estimado.notas || 0,
             subir_notas: estimado.subir_notas || 0,
@@ -227,11 +227,11 @@ const PagosClientesSuperAdmin = () => {
         });
         
         cliente.totalEstimado += totalEstimado;
-        cliente.saldo -= totalEstimado; // Saldo inicial negativo
+        cliente.saldo -= totalEstimado;
       }
     });
 
-    // Procesar cobros reales (pagos)
+    // Procesar cobros reales
     data.cobrosReales.forEach(cobro => {
       if (!cobro.documento || !cobro.documento.id) return;
       
@@ -269,11 +269,10 @@ const PagosClientesSuperAdmin = () => {
       if (cobro.pagado) {
         documento.pagado += monto;
         cliente.totalPagado += monto;
-        documento.saldo += monto; // Aumentamos el saldo con cada pago
-        cliente.saldo += monto; // Aumentamos el saldo del cliente
+        documento.saldo += monto;
+        cliente.saldo += monto;
       }
 
-      // Actualizar estado del documento
       documento.estado = documento.saldo < 0 ? 'Pendiente' : 
                         documento.saldo === 0 ? 'Al día' : 'A favor';
       documento.todasPagadas = documento.saldo >= 0;
@@ -286,7 +285,6 @@ const PagosClientesSuperAdmin = () => {
       cliente.todasTareasPagadas = cliente.saldo >= 0;
     });
     
-    // Convertir Maps a arrays y ordenar
     return Array.from(clientesMap.values()).map(cliente => ({
       ...cliente,
       documentos: Array.from(cliente.documentos.values()).sort((a, b) => 
@@ -362,7 +360,6 @@ const PagosClientesSuperAdmin = () => {
         )
       );
 
-      // Actualizar el fondo del cliente con el saldo residual
       await axios.put(
         `https://sistemacontable-wico.onrender.com/api/actualizar_fondo/${clienteId}/`,
         { 
@@ -529,8 +526,6 @@ const PagosClientesSuperAdmin = () => {
                 <tr>
                   <th>#</th>
                   <th>Cliente</th>
-                  <th></th>
-                  <th></th>
                   <th className="text-end">Unidades</th>
                   <th className="text-end">Estimado</th>
                   <th className="text-end">Real</th>
@@ -551,7 +546,7 @@ const PagosClientesSuperAdmin = () => {
                       style={{ cursor: 'pointer' }}
                     >
                       <td className="text-center">{idxCliente + 1}</td>
-                      <td colSpan="3">{cliente.nombre}</td>
+                      <td>{cliente.nombre}</td>
                       <td className="text-end">Total cliente:</td>
                       <td className="text-end">${cliente.totalEstimado.toFixed(2)}</td>
                       <td className="text-end">${cliente.totalReal.toFixed(2)}</td>
@@ -584,15 +579,7 @@ const PagosClientesSuperAdmin = () => {
                           style={{ cursor: 'pointer' }}
                         >
                           <td className="text-end">{idxCliente + 1}.{idxDoc + 1}</td>
-                          <td colSpan="3">
-                            {documento.nombre}
-                            <span className={`badge ms-2 ${
-                              documento.estado === 'Pendiente' ? 'bg-warning' : 
-                              documento.estado === 'A favor' ? 'bg-info' : 'bg-success'
-                            }`}>
-                              {documento.estado}
-                            </span>
-                          </td>
+                          <td>{documento.nombre}</td>
                           <td className="text-end">Total documento:</td>
                           <td className="text-end">${documento.totalEstimado.toFixed(2)}</td>
                           <td className="text-end">${documento.totalReal.toFixed(2)}</td>
@@ -620,7 +607,7 @@ const PagosClientesSuperAdmin = () => {
                           return (
                             <React.Fragment key={`real-${tarea.id}`}>
                               <tr className={tarea.pagado ? 'table-light' : 'table-warning'}>
-                                <td colSpan="4"></td>
+                                <td className="text-end">{idxCliente + 1}.{idxDoc + 1}</td>
                                 <td>
                                   {tarea.tipo_nombre} - {tarea.mes}
                                   {tarea.tieneContenido && renderContenidoDetalle(tarea.contenido, tarea.tipo_tarea)}
@@ -644,10 +631,10 @@ const PagosClientesSuperAdmin = () => {
                                     {tarea.pagado ? 'Pagado' : 'Pendiente'}
                                   </span>
                                 </td>
-                                <td className="text-end">
+                                <td className={`text-end ${tarea.pagado ? '' : 'text-danger'}`}>
                                   {!tarea.pagado && `$${tarea.monto.toFixed(2)}`}
                                 </td>
-                                <td className="text-end">
+                                <td className="text-end text-success">
                                   {tarea.pagado && `$${tarea.monto.toFixed(2)}`}
                                 </td>
                               </tr>
@@ -662,14 +649,14 @@ const PagosClientesSuperAdmin = () => {
                                   
                                   return (
                                     <tr key={`ajuste-${ajuste.id}`} className={esSuma ? 'table-success' : 'table-danger'}>
-                                      <td colSpan="5" className="text-end small">
+                                      <td colSpan="2" className="text-end small">
                                         {getTipoTarea(ajuste.tipo_tarea || ajuste.cobro?.tarea)} ({esSuma ? 'Suma' : 'Resta'})
                                       </td>
                                       <td className="text-end">{unidades}</td>
                                       <td className="text-end">
                                         {esSuma ? '+' : '-'}${unidades.toFixed(2)}
                                       </td>
-                                      <td colSpan="3"></td>
+                                      <td colSpan="4"></td>
                                     </tr>
                                   );
                                 })}
