@@ -178,12 +178,12 @@ const PagosClientesSuperAdmin = () => {
           documentos: new Map(),
           totalEstimado: 0,
           totalReal: 0,
-          deuda: 0,
-          pagado: 0,
-          deudaConFondo: 0,
+          saldo: 0, // Cambiamos deuda por saldo (puede ser positivo o negativo)
+          totalPagado: 0,
+          todasTareasPagadas: true,
           fondo: doc.cliente.fondo || 0,
           fecha_fondo: doc.cliente.fecha_fondo || null,
-          todasTareasPagadas: true
+          estado: 'Pendiente' // Nuevo campo para estado general
         });
       }
     });
@@ -203,6 +203,7 @@ const PagosClientesSuperAdmin = () => {
       
       if (!cliente.documentos.has(docId)) {
         const tareasAjustes = getTareasPorCobro(estimado.id);
+        const totalEstimado = getTotalEstimadoConAjustes(estimado.id);
         
         cliente.documentos.set(docId, {
           id: docId,
@@ -210,11 +211,12 @@ const PagosClientesSuperAdmin = () => {
           tareasReales: [],
           tareasAjustes: tareasAjustes,
           cobroEstimado: estimado,
-          totalEstimado: getTotalEstimadoConAjustes(estimado.id),
+          totalEstimado: totalEstimado,
           totalReal: 0,
-          deuda: 0,
+          saldo: -totalEstimado, // Inicialmente negativo (lo que debe)
           pagado: 0,
-          todasPagadas: true,
+          estado: 'Pendiente', // Estado inicial
+          todasPagadas: false, // Inicialmente no pagado
           valoresBase: {
             notas: estimado.notas || 0,
             subir_notas: estimado.subir_notas || 0,
@@ -224,11 +226,12 @@ const PagosClientesSuperAdmin = () => {
           }
         });
         
-        cliente.totalEstimado += getTotalEstimadoConAjustes(estimado.id);
+        cliente.totalEstimado += totalEstimado;
+        cliente.saldo -= totalEstimado; // Saldo inicial negativo
       }
     });
 
-    // Procesar cobros reales
+    // Procesar cobros reales (pagos)
     data.cobrosReales.forEach(cobro => {
       if (!cobro.documento || !cobro.documento.id) return;
       
@@ -236,51 +239,12 @@ const PagosClientesSuperAdmin = () => {
       if (!documentoCompleto || !documentoCompleto.cliente) return;
       
       const clienteId = documentoCompleto.cliente.id_cliente || documentoCompleto.cliente.id;
-      let cliente = clientesMap.get(clienteId);
-      
-      if (!cliente) {
-        cliente = {
-          id: clienteId,
-          nombre: documentoCompleto.cliente.nombre_cliente || documentoCompleto.cliente.nombre || 'Cliente sin nombre',
-          agencias: documentoCompleto.cliente.agencias || [],
-          documentos: new Map(),
-          totalEstimado: 0,
-          totalReal: 0,
-          deuda: 0,
-          pagado: 0,
-          deudaConFondo: 0,
-          fondo: documentoCompleto.cliente.fondo || 0,
-          fecha_fondo: documentoCompleto.cliente.fecha_fondo || null,
-          todasTareasPagadas: true
-        };
-        clientesMap.set(clienteId, cliente);
-      }
+      const cliente = clientesMap.get(clienteId);
+      if (!cliente) return;
       
       const docId = cobro.documento.id;
-      let documento = cliente.documentos.get(docId);
-      
-      if (!documento) {
-        documento = {
-          id: docId,
-          nombre: cobro.documento.nombre || documentoCompleto.nombre_archivo || 'Documento sin nombre',
-          tareasReales: [],
-          tareasAjustes: [],
-          cobroEstimado: null,
-          totalEstimado: 0,
-          totalReal: 0,
-          deuda: 0,
-          pagado: 0,
-          todasPagadas: true,
-          valoresBase: {
-            notas: 0,
-            subir_notas: 0,
-            bill: 0,
-            open: 0,
-            spr: 0
-          }
-        };
-        cliente.documentos.set(docId, documento);
-      }
+      const documento = cliente.documentos.get(docId);
+      if (!documento) return;
       
       const unidades = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
                       .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0);
@@ -304,19 +268,22 @@ const PagosClientesSuperAdmin = () => {
 
       if (cobro.pagado) {
         documento.pagado += monto;
-        cliente.pagado += monto;
-      } else {
-        documento.deuda += monto;
-        cliente.deuda += monto;
-        documento.todasPagadas = false;
-        cliente.todasTareasPagadas = false;
+        cliente.totalPagado += monto;
+        documento.saldo += monto; // Aumentamos el saldo con cada pago
+        cliente.saldo += monto; // Aumentamos el saldo del cliente
       }
+
+      // Actualizar estado del documento
+      documento.estado = documento.saldo < 0 ? 'Pendiente' : 
+                        documento.saldo === 0 ? 'Al día' : 'A favor';
+      documento.todasPagadas = documento.saldo >= 0;
     });
 
-    // Calcular deuda con fondo
+    // Calcular estado general del cliente
     clientesMap.forEach(cliente => {
-      cliente.deuda = Math.max(0, cliente.totalEstimado - cliente.pagado);
-      cliente.deudaConFondo = Math.max(0, cliente.deuda - (cliente.fondo || 0));
+      cliente.estado = cliente.saldo < 0 ? 'Pendiente' : 
+                       cliente.saldo === 0 ? 'Al día' : 'A favor';
+      cliente.todasTareasPagadas = cliente.saldo >= 0;
     });
     
     // Convertir Maps a arrays y ordenar
@@ -334,11 +301,10 @@ const PagosClientesSuperAdmin = () => {
     const clientesProcesados = procesarDatos();
 
     const totals = {
-      deuda: clientesProcesados.reduce((sum, c) => sum + c.deuda, 0),
-      pagado: clientesProcesados.reduce((sum, c) => sum + c.pagado, 0),
       estimado: clientesProcesados.reduce((sum, c) => sum + c.totalEstimado, 0),
       real: clientesProcesados.reduce((sum, c) => sum + c.totalReal, 0),
-      deudaConFondo: clientesProcesados.reduce((sum, c) => sum + c.deudaConFondo, 0),
+      saldo: clientesProcesados.reduce((sum, c) => sum + c.saldo, 0),
+      pagado: clientesProcesados.reduce((sum, c) => sum + c.totalPagado, 0),
       fondos: clientesProcesados.reduce((sum, c) => sum + (c.fondo || 0), 0)
     };
 
@@ -369,8 +335,7 @@ const PagosClientesSuperAdmin = () => {
       }
 
       const cliente = cobrosPendientes[0].cliente;
-      const fondoActual = cliente.fondo || 0;
-      const montoTotal = parseFloat(monto) + fondoActual;
+      const montoTotal = parseFloat(monto);
       let saldoDisponible = montoTotal;
       const serviciosAPagar = [];
 
@@ -397,26 +362,15 @@ const PagosClientesSuperAdmin = () => {
         )
       );
 
+      // Actualizar el fondo del cliente con el saldo residual
       await axios.put(
         `https://sistemacontable-wico.onrender.com/api/actualizar_fondo/${clienteId}/`,
         { 
-          fondo: saldoDisponible > 0 ? saldoDisponible : 0,
+          fondo: saldoDisponible,
           fecha_fondo: saldoDisponible > 0 ? fecha : null
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
-      const todosPagados = !data.cobrosReales.some(
-        cr => cr.cliente?.id === clienteId && !cr.pagado
-      );
-
-      if (todosPagados && saldoDisponible > 0) {
-        await axios.put(
-          `https://sistemacontable-wico.onrender.com/api/limpiar_fondo/${clienteId}/`,
-          {},
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      }
 
       setLoading(true);
       const response = await axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobro/', {
@@ -432,7 +386,7 @@ const PagosClientesSuperAdmin = () => {
       });
       
       alert(`Pago aplicado correctamente. ${
-        saldoDisponible > 0 ? `Fondo residual: $${saldoDisponible.toFixed(2)}` : 'Todos los servicios pagados'
+        saldoDisponible > 0 ? `Crédito a favor: $${saldoDisponible.toFixed(2)}` : 'Todos los servicios pagados'
       }`);
     } catch (err) {
       console.error("Error al aplicar pago:", err);
@@ -511,7 +465,7 @@ const PagosClientesSuperAdmin = () => {
                 <option value="">Seleccionar cliente</option>
                 {clientesUnicos.map(cliente => (
                   <option key={cliente.id} value={cliente.id}>
-                    {cliente.nombre} {cliente.fondo > 0 ? `(Fondo: $${cliente.fondo.toFixed(2)})` : ''}
+                    {cliente.nombre} {cliente.fondo > 0 ? `(Crédito: $${cliente.fondo.toFixed(2)})` : ''}
                   </option>
                 ))}
               </Form.Select>
@@ -562,8 +516,8 @@ const PagosClientesSuperAdmin = () => {
             <span className="badge bg-info me-2">Clientes: {clientesProcesados.length}</span>
             <span className="badge bg-warning me-2">Estimado: ${totals.estimado.toFixed(2)}</span>
             <span className="badge bg-primary me-2">Real: ${totals.real.toFixed(2)}</span>
-            <span className="badge bg-danger me-2">
-              Deuda: ${totals.deudaConFondo.toFixed(2)} (${totals.deuda.toFixed(2)})
+            <span className={`badge ${totals.saldo < 0 ? 'bg-danger' : totals.saldo === 0 ? 'bg-success' : 'bg-info'}`}>
+              Saldo: ${totals.saldo.toFixed(2)}
             </span>
             <span className="badge bg-success">Pagado: ${totals.pagado.toFixed(2)}</span>
           </div>
@@ -581,15 +535,18 @@ const PagosClientesSuperAdmin = () => {
                   <th className="text-end">Estimado</th>
                   <th className="text-end">Real</th>
                   <th>Estado</th>
-                  <th className="text-end text-danger">Deuda</th>
-                  <th className="text-end text-success">Pagado</th>
+                  <th className="text-end">Saldo</th>
+                  <th className="text-end">Pagado</th>
                 </tr>
               </thead>
               <tbody>
                 {clientesProcesados.map((cliente, idxCliente) => (
                   <React.Fragment key={`cliente-${cliente.id}`}>
                     <tr 
-                      className="table-primary fw-bold" 
+                      className={`table-primary fw-bold ${
+                        cliente.estado === 'Pendiente' ? 'table-warning' : 
+                        cliente.estado === 'A favor' ? 'table-info' : 'table-success'
+                      }`} 
                       onClick={() => toggleCliente(cliente.id)}
                       style={{ cursor: 'pointer' }}
                     >
@@ -599,40 +556,60 @@ const PagosClientesSuperAdmin = () => {
                       <td className="text-end">${cliente.totalEstimado.toFixed(2)}</td>
                       <td className="text-end">${cliente.totalReal.toFixed(2)}</td>
                       <td className="text-center">
-                        <span className={`badge ${cliente.todasTareasPagadas ? 'bg-success' : 'bg-warning'}`}>
-                          {cliente.todasTareasPagadas ? 'Pagado' : 'Pendiente'}
+                        <span className={`badge ${
+                          cliente.estado === 'Pendiente' ? 'bg-warning' : 
+                          cliente.estado === 'A favor' ? 'bg-info' : 'bg-success'
+                        }`}>
+                          {cliente.estado}
                         </span>
                       </td>
-                      <td className="text-end text-danger fw-bold">
-                        ${cliente.deudaConFondo.toFixed(2)} (${cliente.deuda.toFixed(2)})
-                        {cliente.fondo > 0 && <div className="small">Fondo: ${cliente.fondo.toFixed(2)}</div>}
+                      <td className={`text-end ${
+                        cliente.saldo < 0 ? 'text-danger' : 
+                        cliente.saldo > 0 ? 'text-success' : ''
+                      } fw-bold`}>
+                        ${cliente.saldo.toFixed(2)}
+                        {cliente.fondo > 0 && <div className="small">Crédito: ${cliente.fondo.toFixed(2)}</div>}
                       </td>
-                      <td className="text-end text-success fw-bold">${cliente.pagado.toFixed(2)}</td>
+                      <td className="text-end text-success fw-bold">${cliente.totalPagado.toFixed(2)}</td>
                     </tr>
                     
                     {expandedClientes[cliente.id] && cliente.documentos.map((documento, idxDoc) => (
                       <React.Fragment key={`doc-${documento.id}`}>
                         <tr 
-                          className="table-info" 
+                          className={`table-info ${
+                            documento.estado === 'Pendiente' ? 'table-warning' : 
+                            documento.estado === 'A favor' ? 'table-info' : 'table-success'
+                          }`} 
                           onClick={() => toggleDocumento(documento.id)}
                           style={{ cursor: 'pointer' }}
                         >
                           <td className="text-end">{idxCliente + 1}.{idxDoc + 1}</td>
                           <td colSpan="3">
                             {documento.nombre}
-                            <span className={`badge ms-2 ${documento.todasPagadas ? 'bg-success' : 'bg-warning'}`}>
-                              {documento.todasPagadas ? 'Pagado' : 'Pendiente'}
+                            <span className={`badge ms-2 ${
+                              documento.estado === 'Pendiente' ? 'bg-warning' : 
+                              documento.estado === 'A favor' ? 'bg-info' : 'bg-success'
+                            }`}>
+                              {documento.estado}
                             </span>
                           </td>
                           <td className="text-end">Total documento:</td>
                           <td className="text-end">${documento.totalEstimado.toFixed(2)}</td>
                           <td className="text-end">${documento.totalReal.toFixed(2)}</td>
                           <td className="text-center">
-                            <span className={`badge ${documento.todasPagadas ? 'bg-success' : 'bg-warning'}`}>
-                              {documento.todasPagadas ? 'Pagado' : 'Pendiente'}
+                            <span className={`badge ${
+                              documento.estado === 'Pendiente' ? 'bg-warning' : 
+                              documento.estado === 'A favor' ? 'bg-info' : 'bg-success'
+                            }`}>
+                              {documento.estado}
                             </span>
                           </td>
-                          <td className="text-end text-danger">${documento.deuda.toFixed(2)}</td>
+                          <td className={`text-end ${
+                            documento.saldo < 0 ? 'text-danger' : 
+                            documento.saldo > 0 ? 'text-success' : ''
+                          }`}>
+                            ${documento.saldo.toFixed(2)}
+                          </td>
                           <td className="text-end text-success">${documento.pagado.toFixed(2)}</td>
                         </tr>
                         
@@ -717,7 +694,11 @@ const PagosClientesSuperAdmin = () => {
             <div className="col-md-8 text-md-end">
               <strong className="me-3">Total estimado: ${totals.estimado.toFixed(2)}</strong>
               <strong className="text-primary me-3">Total real: ${totals.real.toFixed(2)}</strong>
-              <strong className="text-danger me-3">Deuda neta: ${totals.deudaConFondo.toFixed(2)}</strong>
+              <strong className={`me-3 ${
+                totals.saldo < 0 ? 'text-danger' : totals.saldo > 0 ? 'text-success' : ''
+              }`}>
+                Saldo neto: ${totals.saldo.toFixed(2)}
+              </strong>
               <strong className="text-success">Pagado: ${totals.pagado.toFixed(2)}</strong>
             </div>
           </div>
