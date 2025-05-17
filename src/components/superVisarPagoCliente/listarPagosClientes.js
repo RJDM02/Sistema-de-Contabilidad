@@ -8,7 +8,8 @@ const PagosClientesSuperAdmin = () => {
     cobrosReales: [],
     tareas: [],
     documentos: [],
-    historialFondos: []
+    montosExtra: [],
+    fondos: []
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -30,50 +31,22 @@ const PagosClientesSuperAdmin = () => {
     const fetchData = async () => {
       const token = localStorage.getItem("auth");
       try {
-        const endpoints = [
-          'listar_cobros_estimados',
-          'listar_cobro',
-          'listar_tarea',
-          'listar_documentacion',
-          'historial_fondo'
-        ];
-        
-        const responses = await Promise.all(
-          endpoints.map(endpoint => 
-            axios.get(`https://sistemacontable-wico.onrender.com/api/${endpoint}/`, {
-              headers: { Authorization: `Bearer ${token}` }
-            })
-          )
-        );
-
-        // Procesar historial de fondos para obtener montos
-        const historialFondos = responses[4].data.reduce((acc, pago) => {
-          if (!acc[pago.cliente_id]) {
-            acc[pago.cliente_id] = {
-              id: pago.cliente_id,
-              nombre: pago.cliente_nombre,
-              pagos: [],
-              monto_extra: 0,
-              fondo: 0
-            };
-          }
-          acc[pago.cliente_id].pagos.push(pago);
-          
-          // Consideramos pagos como monto_extra y el último como fondo
-          if (pago.descripcion?.includes('Pago')) {
-            acc[pago.cliente_id].monto_extra += pago.monto;
-          } else {
-            acc[pago.cliente_id].fondo = pago.monto;
-          }
-          return acc;
-        }, {});
+        const responses = await Promise.all([
+          axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobro/', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('https://sistemacontable-wico.onrender.com/api/listar_tarea/', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('https://sistemacontable-wico.onrender.com/api/listar_documentacion/', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('https://sistemacontable-wico.onrender.com/api/listar_monto_extra/', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('https://sistemacontable-wico.onrender.com/api/historial_fondo/', { headers: { Authorization: `Bearer ${token}` } })
+        ]);
 
         setData({
           cobrosEstimados: responses[0].data,
           cobrosReales: responses[1].data,
           tareas: responses[2].data,
           documentos: responses[3].data,
-          historialFondos: Object.values(historialFondos)
+          montosExtra: responses[4].data,
+          fondos: responses[5].data
         });
         setLoading(false);
       } catch (err) {
@@ -189,14 +162,18 @@ const PagosClientesSuperAdmin = () => {
   const procesarDatos = () => {
     const clientesMap = new Map();
 
-    // Procesar montos por cliente desde historial
-    const montosPorCliente = {};
-    data.historialFondos.forEach(cliente => {
-      montosPorCliente[cliente.id] = {
-        monto_extra: cliente.monto_extra,
-        fondo: cliente.fondo
-      };
-    });
+    // Procesar montos extra por cliente
+    const montosExtraPorCliente = data.montosExtra.reduce((acc, me) => {
+      if (!acc[me.cliente]) acc[me.cliente] = 0;
+      acc[me.cliente] += me.monto;
+      return acc;
+    }, {});
+
+    // Procesar fondos por cliente (último registro)
+    const fondosPorCliente = data.fondos.reduce((acc, fondo) => {
+      acc[fondo.cliente_id] = fondo.monto;
+      return acc;
+    }, {});
 
     // Procesar documentos y clientes
     data.documentos.forEach(doc => {
@@ -213,10 +190,8 @@ const PagosClientesSuperAdmin = () => {
           totalEstimado: 0,
           totalReal: 0,
           saldo: 0,
-          totalPagado: 0,
-          todasTareasPagadas: true,
-          monto_extra: montosPorCliente[clienteId]?.monto_extra || 0,
-          fondo: montosPorCliente[clienteId]?.fondo || 0,
+          totalPagado: montosExtraPorCliente[clienteId] || 0, // Usamos monto_extra como totalPagado
+          fondo: fondosPorCliente[clienteId] || 0,
           estado: 'Pendiente'
         });
       }
@@ -302,9 +277,7 @@ const PagosClientesSuperAdmin = () => {
 
       if (cobro.pagado) {
         documento.pagado += monto;
-        cliente.totalPagado += monto;
         documento.saldo += monto;
-        cliente.saldo += monto;
       }
 
       documento.estado = documento.saldo < 0 ? 'Pendiente' : 
@@ -314,24 +287,17 @@ const PagosClientesSuperAdmin = () => {
 
     // Calcular estado general del cliente
     clientesMap.forEach(cliente => {
-      // El total pagado ahora incluye los montos extra
-      cliente.totalPagado = cliente.totalReal + cliente.monto_extra;
+      // El saldo es estimado - lo pagado (monto_extra)
+      cliente.saldo = cliente.totalEstimado - cliente.totalPagado;
       
-      // Calcular saldo final
-      const saldoFinal = cliente.totalEstimado - cliente.totalPagado;
-      
-      // Si hay monto_extra suficiente para cubrir el estimado
-      if (cliente.monto_extra >= cliente.totalEstimado) {
+      // Si el monto extra cubre el estimado
+      if (cliente.totalPagado >= cliente.totalEstimado) {
         cliente.estado = 'Pagado';
-        // El fondo es el excedente (monto_extra - estimado)
-        cliente.fondo = cliente.monto_extra - cliente.totalEstimado;
+        // El excedente va al fondo
+        cliente.fondo = cliente.totalPagado - cliente.totalEstimado;
       } else {
-        cliente.estado = saldoFinal < 0 ? 'Pendiente' : 
-                        saldoFinal === 0 ? 'Al día' : 'A favor';
-        cliente.todasTareasPagadas = saldoFinal >= 0;
+        cliente.estado = cliente.saldo < 0 ? 'Pendiente' : 'Al día';
       }
-      
-      cliente.saldo = saldoFinal;
     });
     
     return Array.from(clientesMap.values()).map(cliente => ({
@@ -352,15 +318,14 @@ const PagosClientesSuperAdmin = () => {
       real: clientesProcesados.reduce((sum, c) => sum + c.totalReal, 0),
       saldo: clientesProcesados.reduce((sum, c) => sum + c.saldo, 0),
       pagado: clientesProcesados.reduce((sum, c) => sum + c.totalPagado, 0),
-      montosExtra: clientesProcesados.reduce((sum, c) => sum + (c.monto_extra || 0), 0),
       fondos: clientesProcesados.reduce((sum, c) => sum + (c.fondo || 0), 0)
     };
 
     const clientesUnicos = clientesProcesados.map(c => ({
       id: c.id,
       nombre: c.nombre,
-      monto_extra: c.monto_extra || 0,
       fondo: c.fondo || 0,
+      fecha_fondo: c.fecha_fondo || null,
       agencias: c.agencias || []
     }));
 
@@ -373,27 +338,26 @@ const PagosClientesSuperAdmin = () => {
     
     const token = localStorage.getItem("auth");
     try {
-      // Registrar el pago en historial_fondo
-      await axios.post(
-        `https://sistemacontable-wico.onrender.com/api/historial_fondo/`,
+      // Registrar el pago como monto extra
+      await axios.put(
+        `https://sistemacontable-wico.onrender.com/api/monto_extra/`,
         {
-          cliente_id: clienteId,
+          cliente: clienteId,
           monto: parseFloat(monto),
-          descripcion: `Pago registrado el ${fecha}`,
-          fecha: new Date().toISOString()
+          descripcion: `Pago registrado el ${fecha}`
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       // Actualizar datos
       await actualizarDatosDespuesPago(token);
-      
+
       setPagoData({
         monto: '',
         fecha: new Date().toISOString().split('T')[0],
         clienteId: null
       });
-      
+
       alert("Pago registrado correctamente");
     } catch (err) {
       console.error("Error al aplicar pago:", err);
@@ -404,7 +368,7 @@ const PagosClientesSuperAdmin = () => {
   const actualizarDatosDespuesPago = async (token) => {
     setLoading(true);
     try {
-      const [cobrosResponse, estimadosResponse, documentosResponse, fondosResponse] = await Promise.all([
+      const [cobrosResponse, estimadosResponse, documentosResponse, montoExtraResponse, fondosResponse] = await Promise.all([
         axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobro/', {
           headers: { Authorization: `Bearer ${token}` }
         }),
@@ -414,38 +378,21 @@ const PagosClientesSuperAdmin = () => {
         axios.get('https://sistemacontable-wico.onrender.com/api/listar_documentacion/', {
           headers: { Authorization: `Bearer ${token}` }
         }),
+        axios.get('https://sistemacontable-wico.onrender.com/api/listar_monto_extra/', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
         axios.get('https://sistemacontable-wico.onrender.com/api/historial_fondo/', {
           headers: { Authorization: `Bearer ${token}` }
         })
       ]);
-
-      // Procesar historial de fondos
-      const historialFondos = fondosResponse.data.reduce((acc, pago) => {
-        if (!acc[pago.cliente_id]) {
-          acc[pago.cliente_id] = {
-            id: pago.cliente_id,
-            nombre: pago.cliente_nombre,
-            pagos: [],
-            monto_extra: 0,
-            fondo: 0
-          };
-        }
-        acc[pago.cliente_id].pagos.push(pago);
-        
-        if (pago.descripcion?.includes('Pago')) {
-          acc[pago.cliente_id].monto_extra += pago.monto;
-        } else {
-          acc[pago.cliente_id].fondo = pago.monto;
-        }
-        return acc;
-      }, {});
 
       setData(prev => ({ 
         ...prev, 
         cobrosReales: cobrosResponse.data,
         cobrosEstimados: estimadosResponse.data,
         documentos: documentosResponse.data,
-        historialFondos: Object.values(historialFondos)
+        montosExtra: montoExtraResponse.data,
+        fondos: fondosResponse.data
       }));
     } catch (error) {
       console.error("Error al actualizar datos:", error);
@@ -527,7 +474,6 @@ const PagosClientesSuperAdmin = () => {
                   <option key={cliente.id} value={cliente.id}>
                     {cliente.nombre} 
                     {cliente.fondo > 0 && ` (Fondo: $${cliente.fondo.toFixed(2)})`}
-                    {cliente.monto_extra > 0 && ` (Monto extra: $${cliente.monto_extra.toFixed(2)})`}
                   </option>
                 ))}
               </Form.Select>
@@ -578,11 +524,10 @@ const PagosClientesSuperAdmin = () => {
             <span className="badge bg-info me-2">Clientes: {clientesProcesados.length}</span>
             <span className="badge bg-warning me-2">Estimado: ${totals.estimado.toFixed(2)}</span>
             <span className="badge bg-primary me-2">Real: ${totals.real.toFixed(2)}</span>
-            <span className="badge bg-success me-2">Monto Extra: ${totals.montosExtra.toFixed(2)}</span>
-            <span className="badge bg-secondary me-2">Fondos: ${totals.fondos.toFixed(2)}</span>
             <span className={`badge ${totals.saldo < 0 ? 'bg-danger' : totals.saldo === 0 ? 'bg-success' : 'bg-info'}`}>
               Saldo: ${totals.saldo.toFixed(2)}
             </span>
+            <span className="badge bg-success">Pagado: ${totals.pagado.toFixed(2)}</span>
           </div>
         </div>
         <div className="card-body p-0">
@@ -595,8 +540,6 @@ const PagosClientesSuperAdmin = () => {
                   <th className="text-end">Unidades</th>
                   <th className="text-end">Estimado</th>
                   <th className="text-end">Real</th>
-                  <th className="text-end">Monto Extra</th>
-                  <th className="text-end">Fondos</th>
                   <th>Estado</th>
                   <th className="text-end">Saldo</th>
                   <th className="text-end">Pagado</th>
@@ -618,8 +561,6 @@ const PagosClientesSuperAdmin = () => {
                       <td className="text-end">Total cliente:</td>
                       <td className="text-end">${cliente.totalEstimado.toFixed(2)}</td>
                       <td className="text-end">${cliente.totalReal.toFixed(2)}</td>
-                      <td className="text-end">${cliente.monto_extra.toFixed(2)}</td>
-                      <td className="text-end">${cliente.fondo.toFixed(2)}</td>
                       <td className="text-center">
                         <span className={`badge ${
                           cliente.estado === 'Pendiente' ? 'bg-warning' : 
@@ -652,7 +593,6 @@ const PagosClientesSuperAdmin = () => {
                           <td className="text-end">Total documento:</td>
                           <td className="text-end">${documento.totalEstimado.toFixed(2)}</td>
                           <td className="text-end">${documento.totalReal.toFixed(2)}</td>
-                          <td colSpan="2"></td>
                           <td className="text-center">
                             <span className={`badge ${
                               documento.estado === 'Pendiente' ? 'bg-warning' : 
@@ -696,7 +636,6 @@ const PagosClientesSuperAdmin = () => {
                                 <td className={`text-end ${hayDiscrepancia ? 'text-danger fw-bold' : ''}`}>
                                   ${tarea.monto.toFixed(2)}
                                 </td>
-                                <td colSpan="2"></td>
                                 <td className="text-center">
                                   <span className={`badge ${tarea.pagado ? 'bg-success' : 'bg-warning'}`}>
                                     {tarea.pagado ? 'Pagado' : 'Pendiente'}
@@ -727,7 +666,7 @@ const PagosClientesSuperAdmin = () => {
                                       <td className="text-end">
                                         {esSuma ? '+' : '-'}${unidades.toFixed(2)}
                                       </td>
-                                      <td colSpan="6"></td>
+                                      <td colSpan="4"></td>
                                     </tr>
                                   );
                                 })}
@@ -752,13 +691,12 @@ const PagosClientesSuperAdmin = () => {
             <div className="col-md-8 text-md-end">
               <strong className="me-3">Total estimado: ${totals.estimado.toFixed(2)}</strong>
               <strong className="text-primary me-3">Total real: ${totals.real.toFixed(2)}</strong>
-              <strong className="text-success me-3">Monto extra: ${totals.montosExtra.toFixed(2)}</strong>
-              <strong className="text-secondary me-3">Fondos: ${totals.fondos.toFixed(2)}</strong>
               <strong className={`me-3 ${
                 totals.saldo < 0 ? 'text-danger' : totals.saldo > 0 ? 'text-success' : ''
               }`}>
                 Saldo neto: ${totals.saldo.toFixed(2)}
               </strong>
+              <strong className="text-success">Pagado: ${totals.pagado.toFixed(2)}</strong>
             </div>
           </div>
         </div>
