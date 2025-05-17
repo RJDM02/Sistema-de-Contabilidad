@@ -387,10 +387,9 @@ const procesarPagoConMontoExtra = async (clienteId, montoPago, montoTotalPendien
   // 2. Guardar diferencia en monto_extra
   const diferencia = montoPago - montoTotalPendiente;
   await axios.put(
-    `https://sistemacontable-wico.onrender.com/api/monto_extra/`,
+    `https://sistemacontable-wico.onrender.com/api/monto_extra/${clienteId}`,
     {
       monto: diferencia,
-      cliente: clienteId
     },
     { headers: { Authorization: `Bearer ${token}` } }
   );
