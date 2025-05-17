@@ -8,7 +8,6 @@ const PagosClientesSuperAdmin = () => {
     cobrosReales: [],
     tareas: [],
     documentos: [],
-    montosExtra: [],
     historialFondos: []
   });
   const [loading, setLoading] = useState(true);
@@ -36,7 +35,6 @@ const PagosClientesSuperAdmin = () => {
           'listar_cobro',
           'listar_tarea',
           'listar_documentacion',
-          'listar_monto_extra',
           'historial_fondo'
         ];
         
@@ -48,16 +46,25 @@ const PagosClientesSuperAdmin = () => {
           )
         );
 
-        // Procesar historial de fondos
-        const historialFondos = responses[5].data.reduce((acc, pago) => {
+        // Procesar historial de fondos para obtener montos
+        const historialFondos = responses[4].data.reduce((acc, pago) => {
           if (!acc[pago.cliente_id]) {
             acc[pago.cliente_id] = {
               id: pago.cliente_id,
-              nombre_cliente: pago.cliente_nombre,
+              nombre: pago.cliente_nombre,
               pagos: [],
+              monto_extra: 0,
+              fondo: 0
             };
           }
           acc[pago.cliente_id].pagos.push(pago);
+          
+          // Consideramos pagos como monto_extra y el último como fondo
+          if (pago.descripcion?.includes('Pago')) {
+            acc[pago.cliente_id].monto_extra += pago.monto;
+          } else {
+            acc[pago.cliente_id].fondo = pago.monto;
+          }
           return acc;
         }, {});
 
@@ -66,7 +73,6 @@ const PagosClientesSuperAdmin = () => {
           cobrosReales: responses[1].data,
           tareas: responses[2].data,
           documentos: responses[3].data,
-          montosExtra: responses[4].data,
           historialFondos: Object.values(historialFondos)
         });
         setLoading(false);
@@ -183,20 +189,13 @@ const PagosClientesSuperAdmin = () => {
   const procesarDatos = () => {
     const clientesMap = new Map();
 
-    // Procesar montos extra por cliente
-    const montosExtraPorCliente = data.montosExtra.reduce((acc, me) => {
-      if (!acc[me.cliente]) acc[me.cliente] = 0;
-      acc[me.cliente] += me.monto;
-      return acc;
-    }, {});
-
-    // Procesar fondos por cliente
-    const fondosPorCliente = {};
+    // Procesar montos por cliente desde historial
+    const montosPorCliente = {};
     data.historialFondos.forEach(cliente => {
-      const ultimoPago = cliente.pagos[cliente.pagos.length - 1];
-      if (ultimoPago) {
-        fondosPorCliente[cliente.id] = ultimoPago.monto;
-      }
+      montosPorCliente[cliente.id] = {
+        monto_extra: cliente.monto_extra,
+        fondo: cliente.fondo
+      };
     });
 
     // Procesar documentos y clientes
@@ -216,8 +215,8 @@ const PagosClientesSuperAdmin = () => {
           saldo: 0,
           totalPagado: 0,
           todasTareasPagadas: true,
-          monto_extra: montosExtraPorCliente[clienteId] || 0,
-          fondo: fondosPorCliente[clienteId] || 0,
+          monto_extra: montosPorCliente[clienteId]?.monto_extra || 0,
+          fondo: montosPorCliente[clienteId]?.fondo || 0,
           estado: 'Pendiente'
         });
       }
@@ -313,7 +312,7 @@ const PagosClientesSuperAdmin = () => {
       documento.todasPagadas = documento.saldo >= 0;
     });
 
-    // Calcular estado general del cliente considerando monto_extra y fondo
+    // Calcular estado general del cliente
     clientesMap.forEach(cliente => {
       // El total pagado ahora incluye los montos extra
       cliente.totalPagado = cliente.totalReal + cliente.monto_extra;
@@ -362,7 +361,6 @@ const PagosClientesSuperAdmin = () => {
       nombre: c.nombre,
       monto_extra: c.monto_extra || 0,
       fondo: c.fondo || 0,
-      fecha_fondo: c.fecha_fondo || null,
       agencias: c.agencias || []
     }));
 
@@ -375,28 +373,28 @@ const PagosClientesSuperAdmin = () => {
     
     const token = localStorage.getItem("auth");
     try {
-      // 1. Registrar el pago como monto_extra
+      // Registrar el pago en historial_fondo
       await axios.post(
-        `https://sistemacontable-wico.onrender.com/api/crear_monto_extra/`,
+        `https://sistemacontable-wico.onrender.com/api/historial_fondo/`,
         {
-          cliente: clienteId,
+          cliente_id: clienteId,
           monto: parseFloat(monto),
-          descripcion: `Pago registrado el ${fecha}`
+          descripcion: `Pago registrado el ${fecha}`,
+          fecha: new Date().toISOString()
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      // 2. Actualizar datos
+      // Actualizar datos
       await actualizarDatosDespuesPago(token);
       
-      // 3. Resetear formulario
       setPagoData({
         monto: '',
         fecha: new Date().toISOString().split('T')[0],
         clienteId: null
       });
       
-      alert("Pago registrado correctamente como monto extra");
+      alert("Pago registrado correctamente");
     } catch (err) {
       console.error("Error al aplicar pago:", err);
       alert("No se pudo aplicar el pago: " + (err.response?.data?.message || err.message));
@@ -406,7 +404,7 @@ const PagosClientesSuperAdmin = () => {
   const actualizarDatosDespuesPago = async (token) => {
     setLoading(true);
     try {
-      const [cobrosResponse, estimadosResponse, documentosResponse, montoExtraResponse, fondosResponse] = await Promise.all([
+      const [cobrosResponse, estimadosResponse, documentosResponse, fondosResponse] = await Promise.all([
         axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobro/', {
           headers: { Authorization: `Bearer ${token}` }
         }),
@@ -414,9 +412,6 @@ const PagosClientesSuperAdmin = () => {
           headers: { Authorization: `Bearer ${token}` }
         }),
         axios.get('https://sistemacontable-wico.onrender.com/api/listar_documentacion/', {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get('https://sistemacontable-wico.onrender.com/api/listar_monto_extra/', {
           headers: { Authorization: `Bearer ${token}` }
         }),
         axios.get('https://sistemacontable-wico.onrender.com/api/historial_fondo/', {
@@ -429,11 +424,19 @@ const PagosClientesSuperAdmin = () => {
         if (!acc[pago.cliente_id]) {
           acc[pago.cliente_id] = {
             id: pago.cliente_id,
-            nombre_cliente: pago.cliente_nombre,
+            nombre: pago.cliente_nombre,
             pagos: [],
+            monto_extra: 0,
+            fondo: 0
           };
         }
         acc[pago.cliente_id].pagos.push(pago);
+        
+        if (pago.descripcion?.includes('Pago')) {
+          acc[pago.cliente_id].monto_extra += pago.monto;
+        } else {
+          acc[pago.cliente_id].fondo = pago.monto;
+        }
         return acc;
       }, {});
 
@@ -442,7 +445,6 @@ const PagosClientesSuperAdmin = () => {
         cobrosReales: cobrosResponse.data,
         cobrosEstimados: estimadosResponse.data,
         documentos: documentosResponse.data,
-        montosExtra: montoExtraResponse.data,
         historialFondos: Object.values(historialFondos)
       }));
     } catch (error) {
