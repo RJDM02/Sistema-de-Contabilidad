@@ -291,6 +291,9 @@ const PagosClientesSuperAdmin = () => {
 
     // Calcular estado general del cliente considerando monto_extra
     clientesMap.forEach(cliente => {
+      // El total pagado ahora incluye los montos extra
+      cliente.totalPagado = cliente.totalReal + (cliente.monto_extra || 0);
+      
       const saldoFinal = cliente.totalReal - cliente.totalEstimado + cliente.monto_extra;
       
       cliente.estado = saldoFinal < 0 ? 'Pendiente' : 
@@ -334,222 +337,218 @@ const PagosClientesSuperAdmin = () => {
   }, [data, loading, error]);
 
   const procesarPagoParcial = async (clienteId, montoPago, cobrosPendientes, token) => {
-  let saldoDisponible = montoPago;
-  const serviciosAPagar = [];
+    let saldoDisponible = montoPago;
+    const serviciosAPagar = [];
 
-  for (const cobro of cobrosPendientes) {
-    if (saldoDisponible <= 0) break;
-    
-    const montoServicio = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
-                         .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0) * 1;
-    
-    if (saldoDisponible >= montoServicio) {
-      serviciosAPagar.push(cobro.id);
-      saldoDisponible -= montoServicio;
+    for (const cobro of cobrosPendientes) {
+      if (saldoDisponible <= 0) break;
+      
+      const montoServicio = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
+                          .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0) * 1;
+      
+      if (saldoDisponible >= montoServicio) {
+        serviciosAPagar.push(cobro.id);
+        saldoDisponible -= montoServicio;
+      }
     }
-  }
 
-  await Promise.all([
-    ...serviciosAPagar.map(id =>
-      axios.put(
-        `https://sistemacontable-wico.onrender.com/api/modificar_estado_cobro/${id}/`,
-        { pagado: true },
+    await Promise.all([
+      ...serviciosAPagar.map(id =>
+        axios.put(
+          `https://sistemacontable-wico.onrender.com/api/modificar_estado_cobro/${id}/`,
+          { pagado: true },
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+      ),
+      saldoDisponible > 0 && axios.put(
+        `https://sistemacontable-wico.onrender.com/api/actualizar_fondo/${clienteId}/`,
+        { fondo: saldoDisponible, fecha_fondo: pagoData.fecha },
         { headers: { Authorization: `Bearer ${token}` } }
       )
-    ),
-    saldoDisponible > 0 && axios.put(
-      `https://sistemacontable-wico.onrender.com/api/actualizar_fondo/${clienteId}/`,
-      { fondo: saldoDisponible, fecha_fondo: pagoData.fecha },
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-  ]);
-};
+    ]);
+  };
 
-const procesarPagoConMontoExtra = async (clienteId, montoPago, montoTotalPendiente, token) => {
-  // 1. Pagar todo lo pendiente
-  await Promise.all([
-    axios.put(
+  const procesarPagoConMontoExtra = async (clienteId, montoPago, montoTotalPendiente, token) => {
+    // 1. Pagar todo lo pendiente
+    await Promise.all([
+      axios.put(
+        `https://sistemacontable-wico.onrender.com/api/limpiar_fondo/${clienteId}/`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      ),
+      ...data.cobrosReales
+        .filter(cr => cr.cliente?.id === clienteId && !cr.pagado)
+        .map(cr => 
+          axios.put(
+            `https://sistemacontable-wico.onrender.com/api/modificar_estado_cobro/${cr.id}/`,
+            { pagado: true },
+            { headers: { Authorization: `Bearer ${token}` } }
+          )
+        )
+    ]);
+
+    // 2. Guardar diferencia en monto_extra (sin eliminar los existentes)
+    const diferencia = montoPago - montoTotalPendiente;
+    if (diferencia > 0) {
+      await axios.post(
+        `https://sistemacontable-wico.onrender.com/api/crear_monto_extra/`,
+        {
+          cliente: clienteId,
+          monto: diferencia,
+          descripcion: "Pago excedente"
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    }
+  };
+
+  const procesarPagoCompletoOExcedente = async (
+    clienteId, 
+    montoPago, 
+    cobrosPendientes, 
+    montosExtra, 
+    saldoEstimadoPendiente, 
+    token
+  ) => {
+    // 1. Limpiar solo fondos (mantenemos montos extra)
+    await axios.put(
       `https://sistemacontable-wico.onrender.com/api/limpiar_fondo/${clienteId}/`,
       {},
       { headers: { Authorization: `Bearer ${token}` } }
-    ),
-    ...data.cobrosReales
-      .filter(cr => cr.cliente?.id === clienteId && !cr.pagado)
-      .map(cr => 
+    );
+
+    // 2. Pagar todos los cobros pendientes
+    await Promise.all(
+      cobrosPendientes.map(cr =>
         axios.put(
           `https://sistemacontable-wico.onrender.com/api/modificar_estado_cobro/${cr.id}/`,
           { pagado: true },
           { headers: { Authorization: `Bearer ${token}` } }
         )
       )
-  ]);
-
-  // 2. Guardar diferencia en monto_extra
-  const diferencia = montoPago - montoTotalPendiente;
-  await axios.put(
-    `https://sistemacontable-wico.onrender.com/api/monto_extra/${clienteId}`,
-    {
-      monto: diferencia,
-    },
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-};
-
-const procesarPagoCompletoOExcedente = async (
-  clienteId, 
-  montoPago, 
-  cobrosPendientes, 
-  montosExtra, 
-  saldoEstimadoPendiente, 
-  token
-) => {
-  // 1. Limpiar fondos y montos extra existentes
-  await Promise.all([
-    axios.put(
-      `https://sistemacontable-wico.onrender.com/api/limpiar_fondo/${clienteId}/`,
-      {},
-      { headers: { Authorization: `Bearer ${token}` } }
-    ),
-    ...montosExtra.map(me =>
-      axios.delete(
-        `https://sistemacontable-wico.onrender.com/api/eliminar_monto_extra/${me.id}/`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-    )
-  ]);
-
-  // 2. Pagar todos los cobros pendientes
-  await Promise.all(
-    cobrosPendientes.map(cr =>
-      axios.put(
-        `https://sistemacontable-wico.onrender.com/api/modificar_estado_cobro/${cr.id}/`,
-        { pagado: true },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-    )
-  );
-
-  // 3. Calcular excedente si lo hay
-  const excedente = montoPago - saldoEstimadoPendiente;
-  if (excedente > 0) {
-    await axios.put(
-      `https://sistemacontable-wico.onrender.com/api/actualizar_fondo/${clienteId}/`,
-      { fondo: excedente, fecha_fondo: pagoData.fecha },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-  }
-};
-
-const actualizarDatosDespuesPago = async (token) => {
-  setLoading(true);
-  try {
-    const [cobrosResponse, estimadosResponse, documentosResponse, montoExtraResponse] = await Promise.all([
-      axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobro/', {
-        headers: { Authorization: `Bearer ${token}` }
-      }),
-      axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/', {
-        headers: { Authorization: `Bearer ${token}` }
-      }),
-      axios.get('https://sistemacontable-wico.onrender.com/api/listar_documentacion/', {
-        headers: { Authorization: `Bearer ${token}` }
-      }),
-      axios.get('https://sistemacontable-wico.onrender.com/api/listar_monto_extra/', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-    ]);
-
-    setData(prev => ({ 
-      ...prev, 
-      cobrosReales: cobrosResponse.data,
-      cobrosEstimados: estimadosResponse.data,
-      documentos: documentosResponse.data,
-      montosExtra: montoExtraResponse.data
-    }));
-  } catch (error) {
-    console.error("Error al actualizar datos:", error);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  const aplicarPagoNuevaLogica = async () => {
-  const { clienteId, monto, fecha } = pagoData;
-  if (!clienteId || !monto || parseFloat(monto) <= 0 || !fecha) return;
-  
-  const token = localStorage.getItem("auth");
-  try {
-    // 1. Obtener datos del cliente de la lista ya cargada
-    const clienteProcesado = clientesProcesados.find(c => c.id === clienteId);
-    if (!clienteProcesado) {
-      alert("Cliente no encontrado");
-      return;
-    }
-
-    const montoPago = parseFloat(monto);
-    const saldoEstimadoPendiente = Math.abs(clienteProcesado.saldo);
-    const fondoActual = clienteProcesado.fondo || 0;
-
-    // 2. Obtener montos extra del cliente
-    const montoExtraResponse = await axios.get(
-      `https://sistemacontable-wico.onrender.com/api/listar_monto_extra/?cliente=${clienteId}`,
-      { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    const montoExtraExistente = montoExtraResponse.data.reduce((sum, item) => sum + item.monto, 0);
-    const totalDisponible = montoPago + fondoActual + montoExtraExistente;
-
-    // 3. Obtener cobros pendientes
-    const cobrosPendientes = data.cobrosReales
-      .filter(cr => cr.cliente?.id === clienteId && !cr.pagado)
-      .sort((a, b) => new Date(a.fecha_creacion) - new Date(b.fecha_creacion));
-
-    // 4. Calcular monto total pendiente (real)
-    const montoTotalPendiente = cobrosPendientes.reduce((sum, cobro) => {
-      const unidades = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
-                      .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0);
-      return sum + (unidades * 1);
-    }, 0);
-
-    // 5. Determinar el escenario y procesar
-    if (totalDisponible <= montoTotalPendiente) {
-      // Escenario 1: Pago parcial (paga lo que puede y guarda el resto en fondo)
-      await procesarPagoParcial(clienteId, montoPago, cobrosPendientes, token);
-    } else if (totalDisponible > montoTotalPendiente && totalDisponible <= saldoEstimadoPendiente) {
-      // Escenario 2: Pago excede lo real pero no lo estimado (guardar en monto_extra)
-      await procesarPagoConMontoExtra(clienteId, montoPago, montoTotalPendiente, token);
-    } else {
-      // Escenario 3/4: Pago completo o excedente
-      await procesarPagoCompletoOExcedente(
-        clienteId, 
-        montoPago, 
-        cobrosPendientes, 
-        montoExtraResponse.data, 
-        saldoEstimadoPendiente, 
-        token
+    // 3. Calcular excedente si lo hay
+    const excedente = montoPago - saldoEstimadoPendiente;
+    if (excedente > 0) {
+      await axios.put(
+        `https://sistemacontable-wico.onrender.com/api/actualizar_fondo/${clienteId}/`,
+        { fondo: excedente, fecha_fondo: pagoData.fecha },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
     }
+  };
 
-    // 6. Actualizar datos
-    await actualizarDatosDespuesPago(token);
+  const actualizarDatosDespuesPago = async (token) => {
+    setLoading(true);
+    try {
+      const [cobrosResponse, estimadosResponse, documentosResponse, montoExtraResponse] = await Promise.all([
+        axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobro/', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get('https://sistemacontable-wico.onrender.com/api/listar_documentacion/', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get('https://sistemacontable-wico.onrender.com/api/listar_monto_extra/', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
 
-    // 7. Resetear formulario
-    setPagoData({
-      monto: '',
-      fecha: new Date().toISOString().split('T')[0],
-      clienteId: null
-    });
-
-    alert("Pago procesado correctamente");
-
-  } catch (err) {
-    console.error("Error al aplicar pago:", err);
-    if (err.response?.status === 404) {
-      alert("Error: Endpoint no encontrado. Verifica la conexión con el backend.");
-    } else {
-      alert("No se pudo aplicar el pago: " + (err.response?.data?.message || err.message));
+      setData(prev => ({ 
+        ...prev, 
+        cobrosReales: cobrosResponse.data,
+        cobrosEstimados: estimadosResponse.data,
+        documentos: documentosResponse.data,
+        montosExtra: montoExtraResponse.data
+      }));
+    } catch (error) {
+      console.error("Error al actualizar datos:", error);
+    } finally {
+      setLoading(false);
     }
-  }
-};
+  };
+
+  const aplicarPagoNuevaLogica = async () => {
+    const { clienteId, monto, fecha } = pagoData;
+    if (!clienteId || !monto || parseFloat(monto) <= 0 || !fecha) return;
+    
+    const token = localStorage.getItem("auth");
+    try {
+      // 1. Obtener datos del cliente de la lista ya cargada
+      const clienteProcesado = clientesProcesados.find(c => c.id === clienteId);
+      if (!clienteProcesado) {
+        alert("Cliente no encontrado");
+        return;
+      }
+
+      const montoPago = parseFloat(monto);
+      const saldoEstimadoPendiente = Math.abs(clienteProcesado.saldo);
+      const fondoActual = clienteProcesado.fondo || 0;
+
+      // 2. Obtener montos extra del cliente
+      const montoExtraResponse = await axios.get(
+        `https://sistemacontable-wico.onrender.com/api/listar_monto_extra/?cliente=${clienteId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const montoExtraExistente = montoExtraResponse.data.reduce((sum, item) => sum + item.monto, 0);
+      const totalDisponible = montoPago + fondoActual + montoExtraExistente;
+
+      // 3. Obtener cobros pendientes
+      const cobrosPendientes = data.cobrosReales
+        .filter(cr => cr.cliente?.id === clienteId && !cr.pagado)
+        .sort((a, b) => new Date(a.fecha_creacion) - new Date(b.fecha_creacion));
+
+      // 4. Calcular monto total pendiente (real)
+      const montoTotalPendiente = cobrosPendientes.reduce((sum, cobro) => {
+        const unidades = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
+                        .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0);
+        return sum + (unidades * 1);
+      }, 0);
+
+      // 5. Determinar el escenario y procesar
+      if (totalDisponible <= montoTotalPendiente) {
+        // Escenario 1: Pago parcial (paga lo que puede y guarda el resto en fondo)
+        await procesarPagoParcial(clienteId, montoPago, cobrosPendientes, token);
+      } else if (totalDisponible > montoTotalPendiente && totalDisponible <= saldoEstimadoPendiente) {
+        // Escenario 2: Pago excede lo real pero no lo estimado (guardar en monto_extra)
+        await procesarPagoConMontoExtra(clienteId, montoPago, montoTotalPendiente, token);
+      } else {
+        // Escenario 3/4: Pago completo o excedente
+        await procesarPagoCompletoOExcedente(
+          clienteId, 
+          montoPago, 
+          cobrosPendientes, 
+          montoExtraResponse.data, 
+          saldoEstimadoPendiente, 
+          token
+        );
+      }
+
+      // 6. Actualizar datos
+      await actualizarDatosDespuesPago(token);
+
+      // 7. Resetear formulario
+      setPagoData({
+        monto: '',
+        fecha: new Date().toISOString().split('T')[0],
+        clienteId: null
+      });
+
+      alert("Pago procesado correctamente");
+
+    } catch (err) {
+      console.error("Error al aplicar pago:", err);
+      if (err.response?.status === 404) {
+        alert("Error: Endpoint no encontrado. Verifica la conexión con el backend.");
+      } else {
+        alert("No se pudo aplicar el pago: " + (err.response?.data?.message || err.message));
+      }
+    }
+  };
 
   if (loading) return (
     <div className="d-flex justify-content-center mt-5">
@@ -624,7 +623,6 @@ const actualizarDatosDespuesPago = async (token) => {
                   <option key={cliente.id} value={cliente.id}>
                     {cliente.nombre} 
                     {cliente.fondo > 0 && ` (Crédito: $${cliente.fondo.toFixed(2)})`}
-                    {cliente.monto_extra > 0 && ` (Monto extra: $${cliente.monto_extra.toFixed(2)})`}
                   </option>
                 ))}
               </Form.Select>
@@ -726,7 +724,6 @@ const actualizarDatosDespuesPago = async (token) => {
                       } fw-bold`}>
                         ${cliente.saldo.toFixed(2)}
                         {cliente.fondo > 0 && <div className="small">Crédito: ${cliente.fondo.toFixed(2)}</div>}
-                        {cliente.monto_extra > 0 && <div className="small">Monto extra: ${cliente.monto_extra.toFixed(2)}</div>}
                       </td>
                       <td className="text-end text-success fw-bold">${cliente.totalPagado.toFixed(2)}</td>
                     </tr>
