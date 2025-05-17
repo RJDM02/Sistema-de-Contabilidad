@@ -340,11 +340,9 @@ const PagosClientesSuperAdmin = () => {
     try {
       // Registrar el pago como monto extra
       await axios.put(
-        `https://sistemacontable-wico.onrender.com/api/monto_extra/`,
+        `https://sistemacontable-wico.onrender.com/api/monto_extra/${clienteId}`,
         {
-          cliente: clienteId,
           monto: parseFloat(monto),
-          descripcion: `Pago registrado el ${fecha}`
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
