@@ -231,7 +231,7 @@ const PagosClientesSuperAdmin = () => {
       }
     });
 
-    // Procesar cobros reales
+    // Procesar cobros reales (pagos)
     data.cobrosReales.forEach(cobro => {
       if (!cobro.documento || !cobro.documento.id) return;
       
@@ -246,20 +246,24 @@ const PagosClientesSuperAdmin = () => {
       const documento = cliente.documentos.get(docId);
       if (!documento) return;
       
-      const unidades = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
-                      .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0);
-      const monto = unidades * 1;
+      // Modificado para manejar pagos por estimación
+      const monto = cobro.tipo_pago === 'estimacion' ? cobro.monto : 
+        [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
+        .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0) * 1;
 
       const tarea = {
         id: cobro.id,
         tipo_tarea: cobro.tipo_tarea,
         tipo_nombre: getTipoTarea(cobro.tipo_tarea),
         mes: cobro.mes || '',
-        unidades: unidades,
+        unidades: cobro.tipo_pago === 'estimacion' ? monto : 
+          [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
+          .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0),
         monto: monto,
         contenido: [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])],
         tieneContenido: (cobro.contenido?.length > 0) || (cobro.contenido_open?.length > 0) || (cobro.contenido_spr?.length > 0),
-        pagado: cobro.pagado || false
+        pagado: cobro.pagado || false,
+        esEstimacion: cobro.tipo_pago === 'estimacion'
       };
 
       documento.tareasReales.push(tarea);
@@ -273,6 +277,7 @@ const PagosClientesSuperAdmin = () => {
         cliente.saldo += monto;
       }
 
+      // Actualizar estado del documento
       documento.estado = documento.saldo < 0 ? 'Pendiente' : 
                         documento.saldo === 0 ? 'Al día' : 'A favor';
       documento.todasPagadas = documento.saldo >= 0;
@@ -317,74 +322,107 @@ const PagosClientesSuperAdmin = () => {
     return { clientesProcesados, clientesUnicos, totals };
   }, [data, loading, error]);
 
-  const aplicarPagoConFondo = async () => {
+  const aplicarPagoPorEstimacionFrontend = async () => {
     const { clienteId, monto, fecha } = pagoData;
     if (!clienteId || !monto || parseFloat(monto) <= 0 || !fecha) return;
     
     const token = localStorage.getItem("auth");
     try {
-      const cobrosPendientes = data.cobrosReales
-        .filter(cr => cr.cliente?.id === clienteId && !cr.pagado)
-        .sort((a, b) => new Date(a.fecha_creacion) - new Date(b.fecha_creacion));
-      
-      if (cobrosPendientes.length === 0) {
-        alert("El cliente no tiene cobros pendientes");
+      // 1. Obtener el cliente procesado para ver su saldo estimado pendiente
+      const clienteProcesado = clientesProcesados.find(c => c.id === clienteId);
+      if (!clienteProcesado) {
+        alert("Cliente no encontrado");
         return;
       }
 
-      const cliente = cobrosPendientes[0].cliente;
-      const montoTotal = parseFloat(monto);
-      let saldoDisponible = montoTotal;
-      const serviciosAPagar = [];
+      // 2. Calcular saldo pendiente basado en estimación (negativo en el estado)
+      const saldoPendiente = Math.abs(clienteProcesado.saldo);
+      const montoPago = parseFloat(monto);
 
-      for (const cobro of cobrosPendientes) {
-        if (saldoDisponible <= 0) break;
+      if (saldoPendiente <= 0) {
+        // 3. Si no hay saldo pendiente, todo va a fondo
+        await axios.put(
+          `https://sistemacontable-wico.onrender.com/api/actualizar_fondo/${clienteId}/`,
+          { 
+            fondo: montoPago,
+            fecha_fondo: fecha
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
         
-        const unidades = [...(cobro.contenido || []), ...(cobro.contenido_open || []), ...(cobro.contenido_spr || [])]
-                        .reduce((sum, item) => sum + (item.unidades || 0), cobro.unidades || 0);
-        const montoServicio = unidades * 1;
+        alert(`Fondo registrado correctamente: $${montoPago.toFixed(2)}`);
+      } else {
+        // 4. Si hay saldo pendiente
+        const montoAplicar = Math.min(montoPago, saldoPendiente);
+        const saldoResidual = montoPago - montoAplicar;
+
+        // 5. Buscar el documento con saldo pendiente para asociar el pago
+        const documentoPendiente = clienteProcesado.documentos.find(doc => doc.saldo < 0);
         
-        if (saldoDisponible >= montoServicio) {
-          serviciosAPagar.push(cobro.id);
-          saldoDisponible -= montoServicio;
+        if (!documentoPendiente) {
+          alert("Error: No se encontró documento pendiente");
+          return;
         }
+
+        // 6. Crear un cobro real que represente este pago por estimación
+        await axios.post(
+          `https://sistemacontable-wico.onrender.com/api/crear_cobro/`,
+          {
+            documento: { id: documentoPendiente.id },
+            cliente: { id: clienteId },
+            unidades: montoAplicar, // Usamos el monto como unidades
+            monto: montoAplicar,
+            fecha,
+            pagado: true,
+            tipo_tarea: 1, // Asignamos un tipo de tarea por defecto (Notas)
+            tipo_pago: 'estimacion', // Marcador especial
+            descripcion: `Pago por estimación - Saldo pendiente`
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        // 7. Si hay saldo residual, guardar como fondo
+        if (saldoResidual > 0) {
+          await axios.put(
+            `https://sistemacontable-wico.onrender.com/api/actualizar_fondo/${clienteId}/`,
+            { 
+              fondo: saldoResidual,
+              fecha_fondo: fecha
+            },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+        }
+
+        alert(`Pago por estimación aplicado. ${
+          saldoResidual > 0 ? `Crédito disponible: $${saldoResidual.toFixed(2)}` : ''
+        }`);
       }
 
-      await Promise.all(
-        serviciosAPagar.map(id =>
-          axios.put(
-            `https://sistemacontable-wico.onrender.com/api/modificar_estado_cobro/${id}/`,
-            { pagado: true },
-            { headers: { Authorization: `Bearer ${token}` } }
-          )
-        )
-      );
-
-      await axios.put(
-        `https://sistemacontable-wico.onrender.com/api/actualizar_fondo/${clienteId}/`,
-        { 
-          fondo: saldoDisponible,
-          fecha_fondo: saldoDisponible > 0 ? fecha : null
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
+      // 8. Actualizar datos
       setLoading(true);
-      const response = await axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobro/', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setData(prev => ({ ...prev, cobrosReales: response.data }));
+      const [cobrosResponse, estimadosResponse] = await Promise.all([
+        axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobro/', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get('https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+      
+      setData(prev => ({ 
+        ...prev, 
+        cobrosReales: cobrosResponse.data,
+        cobrosEstimados: estimadosResponse.data
+      }));
       setLoading(false);
       
+      // 9. Resetear formulario
       setPagoData({
         monto: '',
         fecha: new Date().toISOString().split('T')[0],
         clienteId: null
       });
-      
-      alert(`Pago aplicado correctamente. ${
-        saldoDisponible > 0 ? `Crédito a favor: $${saldoDisponible.toFixed(2)}` : 'Todos los servicios pagados'
-      }`);
+
     } catch (err) {
       console.error("Error al aplicar pago:", err);
       alert("No se pudo aplicar el pago: " + (err.response?.data?.message || err.message));
@@ -496,7 +534,7 @@ const PagosClientesSuperAdmin = () => {
               <Button
                 variant="success"
                 className="w-100"
-                onClick={aplicarPagoConFondo}
+                onClick={aplicarPagoPorEstimacionFrontend}
                 disabled={!pagoData.clienteId || !pagoData.monto || parseFloat(pagoData.monto) <= 0 || !pagoData.fecha}
               >
                 Aplicar Pago
@@ -611,6 +649,7 @@ const PagosClientesSuperAdmin = () => {
                                 <td>
                                   {tarea.tipo_nombre} - {tarea.mes}
                                   {tarea.tieneContenido && renderContenidoDetalle(tarea.contenido, tarea.tipo_tarea)}
+                                  {tarea.esEstimacion && <span className="badge bg-secondary ms-2">Estimación</span>}
                                 </td>
                                 <td className="text-end">{tarea.unidades}</td>
                                 <td className={`text-end ${hayDiscrepancia ? 'text-danger fw-bold' : ''}`}>
