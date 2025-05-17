@@ -363,19 +363,19 @@ const PagosClientesSuperAdmin = () => {
           alert("Error: No se encontró documento pendiente");
           return;
         }
-
+        
         // 6. Crear un cobro real que represente este pago por estimación
         await axios.post(
-          `https://sistemacontable-wico.onrender.com/api/crear_cobro/`,
+          `https://sistemacontable-wico.onrender.com/api/cobro/`,
           {
-            documento: { id: documentoPendiente.id },
-            cliente: { id: clienteId },
-            unidades: montoAplicar, // Usamos el monto como unidades
+            documento: documentoPendiente.id, // Enviamos solo el ID, no un objeto
+            cliente: clienteId, // Enviamos solo el ID, no un objeto
+            unidades: montoAplicar,
             monto: montoAplicar,
             fecha,
             pagado: true,
-            tipo_tarea: 1, // Asignamos un tipo de tarea por defecto (Notas)
-            tipo_pago: 'estimacion', // Marcador especial
+            tipo_tarea: 1,
+            tipo_pago: 'estimacion',
             descripcion: `Pago por estimación - Saldo pendiente`
           },
           { headers: { Authorization: `Bearer ${token}` } }
