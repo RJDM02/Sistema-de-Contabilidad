@@ -66,11 +66,11 @@ const Navbar = () => {
     }
 
     //Esto es a futuro porque predigo que va a pasar 
-    //items.push({
-    //    path: "/monto_extra",
-    //    icon: "bi-cash-stack",
-    //    label: "Monto_extra"
-    //  });
+    items.push({
+        path: "/monto_extra",
+        icon: "bi-cash-stack",
+        label: "Monto_extra"
+    });
 
     // COBROS - Primero para todos los usuarios
     if (userRole === "Admin" || userRole === "user_User" || userRole === "user_Supervisor" || userRole === "user_Supervisado") {
