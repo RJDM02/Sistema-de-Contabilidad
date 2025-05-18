@@ -264,7 +264,7 @@ const Home = () => {
                       <div className="card-body text-center">
                         <h6 className="text-primary">Total Cobrar</h6>
                         <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.totalEstimadoMes)}</h3>
-                        <p className="text-muted small">Valor estimado a cobrar</p>
+                        <p className="text-muted small">Mis Cobros Futuros</p>
                       </div>
                     </div>
                   </div>
@@ -272,9 +272,9 @@ const Home = () => {
                   <div className="col-md-6 col-lg-3 mb-4">
                     <div className="card h-100 border-info">
                       <div className="card-body text-center">
-                        <h6 className="text-info">Monto Extra</h6>
+                        <h6 className="text-info">Total Cobrado</h6>
                         <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.totalRealMes)}</h3>
-                        <p className="text-muted small">Monto extra recibido</p>
+                        <p className="text-muted small">Lo que has cobrado en el presente</p>
                       </div>
                     </div>
                   </div>
@@ -284,7 +284,7 @@ const Home = () => {
                       <div className="card-body text-center">
                         <h6 className="text-success">Total Pagado</h6>
                         <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.pagadoMes)}</h3>
-                        <p className="text-muted small">Monto recibido</p>
+                        <p className="text-muted small">Lo que le he pagado a la plebe</p>
                       </div>
                     </div>
                   </div>
@@ -294,50 +294,7 @@ const Home = () => {
                       <div className="card-body text-center">
                         <h6 className="text-danger">Pendiente por Cobrar</h6>
                         <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.deudaMes)}</h3>
-                        <p className="text-muted small">Diferencia por cobrar</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-4">
-                  <div className="card">
-                    <div className="card-header bg-light">
-                      <h6 className="mb-0">Resumen Comparativo</h6>
-                    </div>
-                    <div className="card-body">
-                      <div className="row">
-                        <div className="col-md-6">
-                          <div className="d-flex justify-content-between mb-2">
-                            <span>Estimado vs Pagado:</span>
-                            <strong className={parseFloat(resumenSuperAdmin.pagadoMes) >= parseFloat(resumenSuperAdmin.totalEstimadoMes) ? "text-success" : "text-danger"}>
-                              {((parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100).toFixed(2))}%
-                            </strong>
-                          </div>
-                          <div className="progress mb-4" style={{height: "10px"}}>
-                            <div 
-                              className="progress-bar bg-primary" 
-                              role="progressbar" 
-                              style={{width: `${Math.min(100, (parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100))}%`}} 
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="col-md-6">
-                          <div className="d-flex justify-content-between mb-2">
-                            <span>Porcentaje de cobranza:</span>
-                            <strong className={parseFloat(resumenSuperAdmin.pagadoMes) >= parseFloat(resumenSuperAdmin.totalEstimadoMes) * 0.8 ? "text-success" : "text-warning"}>
-                              {((parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100).toFixed(2))}%
-                            </strong>
-                          </div>
-                          <div className="progress mb-4" style={{height: "10px"}}>
-                            <div 
-                              className="progress-bar bg-success" 
-                              role="progressbar" 
-                              style={{width: `${Math.min(100, (parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100))}%`}} 
-                            />
-                          </div>
-                        </div>
+                        <p className="text-muted small">Lo que me deben las ratas de mis clientes</p>
                       </div>
                     </div>
                   </div>
