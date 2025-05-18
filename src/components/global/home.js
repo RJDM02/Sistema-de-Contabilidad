@@ -52,93 +52,79 @@ const Home = () => {
   };
 
   const cargarDatosSuperAdmin = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const token = localStorage.getItem("auth");
-      
-      // Make all API calls in parallel
-      const [estimadosResponse, tareasResponse, montosExtraResponse, cobrosResponse] = await Promise.all([
-        axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get("https://sistemacontable-wico.onrender.com/api/listar_tarea/", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get("https://sistemacontable-wico.onrender.com/api/listar_monto_extra/", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro/", {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-      ]);
+  try {
+    setLoading(true);
+    setError(null);
+    const token = localStorage.getItem("auth");
+    
+    const [estimadosResponse, tareasResponse, montosExtraResponse, cobrosResponse] = await Promise.all([
+      axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      axios.get("https://sistemacontable-wico.onrender.com/api/listar_tarea/", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      axios.get("https://sistemacontable-wico.onrender.com/api/listar_monto_extra/", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro/", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ]);
 
-      // 1. Calculate "Total Cobrar" (estimados + sumas - restas from tareas)
-      let totalEstimado = 0;
-      
-      // Sum all bill, notas and subir_notas from estimados
-      estimadosResponse.data.forEach(estimado => {
-        totalEstimado += (estimado.bill || 0) + (estimado.notas || 0) + (estimado.subir_notas || 0);
-      });
-      
-      // Add sums and subtract rests from tareas
-      tareasResponse.data.forEach(tarea => {
-        if (tarea.cobro) {
-          totalEstimado += (tarea.cobro.suma || 0) - (tarea.cobro.restar || 0);
-        }
-      });
-      
-      // 2. Calculate "Monto Extra" (sum of all montos_extra)
-      const montoExtra = montosExtraResponse.data.reduce((sum, extra) => sum + (extra.monto || 0), 0);
-      
-      // 3. Calculate "Total Pagado" (units from cobros including bonificaciones and sanciones)
-      let totalPagado = 0;
-      
-      cobrosResponse.data.forEach(cobro => {
-        let unidades = 0;
-        
-        // Calculate units from different content types
-        if (cobro.contenido?.length > 0) {
-          unidades += cobro.contenido.reduce((sum, r) => sum + (r.unidades || 0), 0);
-        }
-        if (cobro.contenido_open?.length > 0) {
-          unidades += cobro.contenido_open.reduce((sum, r) => sum + (r.unidades || 0), 0);
-        }
-        if (cobro.contenido_spr?.length > 0) {
-          unidades += cobro.contenido_spr.reduce((sum, r) => sum + (r.unidades || 0), 0);
-        }
-        if (unidades === 0 && cobro.unidades) {
-          unidades = cobro.unidades;
-        }
-        
-        // Apply bonificaciones (add) and sanciones (subtract)
-        unidades += (cobro.bonificado || 0) - (cobro.sancionado || 0);
-        
-        // Multiply by 0.4 and add to total
-        totalPagado += unidades * 0.4;
-      });
-      
-      // 4. Calculate "Pendiente por Cobrar" (difference between estimado and pagado)
-      let pendiente = 0;
-      if (totalEstimado > totalPagado) {
-        pendiente = totalEstimado - totalPagado;
+    // 1. Total Cobrar (estimados + sumas - restas)
+    let totalEstimado = 0;
+    estimadosResponse.data.forEach(estimado => {
+      totalEstimado += (estimado.bill || 0) + (estimado.notas || 0) + (estimado.subir_notas || 0);
+    });
+    
+    tareasResponse.data.forEach(tarea => {
+      if (tarea.cobro) {
+        totalEstimado += (tarea.cobro.suma || 0) - (tarea.cobro.restar || 0);
       }
-      
-      // Update state with calculated data
-      setResumenSuperAdmin({
-        totalEstimadoMes: totalEstimado.toFixed(2),
-        totalRealMes: montoExtra.toFixed(2),
-        pagadoMes: totalPagado.toFixed(2),
-        deudaMes: pendiente.toFixed(2)
-      });
-      
-    } catch (error) {
-      console.error("Error al cargar datos para SuperAdmin", error);
-      setError("No se pudieron cargar los datos financieros. Por favor, intente nuevamente más tarde.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    });
+
+    // 2. Monto Extra (suma directa)
+    const montoExtra = montosExtraResponse.data.reduce((sum, extra) => sum + (extra.monto || 0), 0);
+
+    // 3. Total Pagado (cobros reales * 0.4)
+    let totalPagado = 0;
+    cobrosResponse.data.forEach(cobro => {
+      let unidades = 0;
+      if (cobro.contenido?.length > 0) {
+        unidades += cobro.contenido.reduce((sum, r) => sum + (r.unidades || 0), 0);
+      }
+      if (cobro.contenido_open?.length > 0) {
+        unidades += cobro.contenido_open.reduce((sum, r) => sum + (r.unidades || 0), 0);
+      }
+      if (cobro.contenido_spr?.length > 0) {
+        unidades += cobro.contenido_spr.reduce((sum, r) => sum + (r.unidades || 0), 0);
+      }
+      if (unidades === 0 && cobro.unidades) {
+        unidades = cobro.unidades;
+      }
+      unidades += (cobro.bonificado || 0) - (cobro.sancionado || 0);
+      totalPagado += unidades * 0.4;
+    });
+
+    // 4. Pendiente por Cobrar (Total Cobrar - Monto Extra)
+    let pendiente = totalEstimado - montoExtra;
+    if (pendiente < 0) pendiente = 0; // No mostrar valores negativos
+
+    setResumenSuperAdmin({
+      totalEstimadoMes: totalEstimado.toFixed(2),
+      totalRealMes: montoExtra.toFixed(2),
+      pagadoMes: totalPagado.toFixed(2),
+      deudaMes: pendiente.toFixed(2)
+    });
+    
+  } catch (error) {
+    console.error("Error al cargar datos para SuperAdmin", error);
+    setError("No se pudieron cargar los datos financieros. Por favor, intente nuevamente más tarde.");
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   const cargarDatosCobros = useCallback(async (userId) => {
     if (!userId) return;
