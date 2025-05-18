@@ -52,50 +52,52 @@ const Home = () => {
   };
 
   const cargarDatosSuperAdmin = useCallback(async () => {
-  try {
-    setLoading(true);
-    setError(null);
-    const token = localStorage.getItem("auth");
-    
-    // Obtener el mes actual en formato texto (ej: "mayo")
-    const meses = [
-      "enero", "febrero", "marzo", "abril", "mayo", "junio",
-      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
-    ];
-    const nombreMesActual = meses[new Date().getMonth()];
-    
-    // Obtener todos los cobros estimados
-    const estimadosResponse = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    
-    // Obtener todos los cobros reales
-    const realesResponse = await axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro/", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    
-    // 1. Calcular total estimado del mes actual
-    let totalEstimado = 0;
-    estimadosResponse.data.forEach(estimado => {
-      // Verificar si el cobro estimado pertenece al mes actual
-      if (estimado.mes && estimado.mes.toLowerCase() === nombreMesActual) {
-        totalEstimado += (estimado.bill || 0) + (estimado.notas || 0) + 
-                        (estimado.subir_notas || 0) + (estimado.open || 0) + 
-                        (estimado.spr || 0);
-      }
-    });
-    
-    // 2. Calcular total real, pagado y deuda del mes actual
-    let totalReal = 0;
-    let pagado = 0;
-    let deuda = 0;
-    
-    realesResponse.data.forEach(cobro => {
-      // Verificar si el cobro real pertenece al mes actual
-      if (cobro.mes && cobro.mes.toLowerCase() === nombreMesActual) {
+    try {
+      setLoading(true);
+      setError(null);
+      const token = localStorage.getItem("auth");
+      
+      // Make all API calls in parallel
+      const [estimadosResponse, tareasResponse, montosExtraResponse, cobrosResponse] = await Promise.all([
+        axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobros_estimados/", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        axios.get("https://sistemacontable-wico.onrender.com/api/listar_tarea/", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        axios.get("https://sistemacontable-wico.onrender.com/api/listar_monto_extra/", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        axios.get("https://sistemacontable-wico.onrender.com/api/listar_cobro/", {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      ]);
+
+      // 1. Calculate "Total Cobrar" (estimados + sumas - restas from tareas)
+      let totalEstimado = 0;
+      
+      // Sum all bill, notas and subir_notas from estimados
+      estimadosResponse.data.forEach(estimado => {
+        totalEstimado += (estimado.bill || 0) + (estimado.notas || 0) + (estimado.subir_notas || 0);
+      });
+      
+      // Add sums and subtract rests from tareas
+      tareasResponse.data.forEach(tarea => {
+        if (tarea.cobro) {
+          totalEstimado += (tarea.cobro.suma || 0) - (tarea.cobro.restar || 0);
+        }
+      });
+      
+      // 2. Calculate "Monto Extra" (sum of all montos_extra)
+      const montoExtra = montosExtraResponse.data.reduce((sum, extra) => sum + (extra.monto || 0), 0);
+      
+      // 3. Calculate "Total Pagado" (units from cobros including bonificaciones and sanciones)
+      let totalPagado = 0;
+      
+      cobrosResponse.data.forEach(cobro => {
         let unidades = 0;
         
-        // Calcular unidades de los diferentes tipos de contenido
+        // Calculate units from different content types
         if (cobro.contenido?.length > 0) {
           unidades += cobro.contenido.reduce((sum, r) => sum + (r.unidades || 0), 0);
         }
@@ -109,32 +111,34 @@ const Home = () => {
           unidades = cobro.unidades;
         }
         
-        const monto = unidades * 1; // Asumiendo $1 por unidad
-        totalReal += monto;
+        // Apply bonificaciones (add) and sanciones (subtract)
+        unidades += (cobro.bonificado || 0) - (cobro.sancionado || 0);
         
-        if (cobro.pagado) {
-          pagado += monto;
-        } else {
-          deuda += monto;
-        }
+        // Multiply by 0.4 and add to total
+        totalPagado += unidades * 0.4;
+      });
+      
+      // 4. Calculate "Pendiente por Cobrar" (difference between estimado and pagado)
+      let pendiente = 0;
+      if (totalEstimado > totalPagado) {
+        pendiente = totalEstimado - totalPagado;
       }
-    });
-    
-    // Actualizar el estado con los datos calculados
-    setResumenSuperAdmin({
-      totalEstimadoMes: totalEstimado.toFixed(2),
-      totalRealMes: totalReal.toFixed(2),
-      pagadoMes: pagado.toFixed(2),
-      deudaMes: deuda.toFixed(2)
-    });
-    
-  } catch (error) {
-    console.error("Error al cargar datos para SuperAdmin", error);
-    setError("No se pudieron cargar los datos financieros. Por favor, intente nuevamente más tarde.");
-  } finally {
-    setLoading(false);
-  }
-}, []);
+      
+      // Update state with calculated data
+      setResumenSuperAdmin({
+        totalEstimadoMes: totalEstimado.toFixed(2),
+        totalRealMes: montoExtra.toFixed(2),
+        pagadoMes: totalPagado.toFixed(2),
+        deudaMes: pendiente.toFixed(2)
+      });
+      
+    } catch (error) {
+      console.error("Error al cargar datos para SuperAdmin", error);
+      setError("No se pudieron cargar los datos financieros. Por favor, intente nuevamente más tarde.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const cargarDatosCobros = useCallback(async (userId) => {
     if (!userId) return;
@@ -265,14 +269,14 @@ const Home = () => {
           <div className="col-12">
             <div className="card shadow">
               <div className="card-header bg-dark text-white">
-                <h5 className="card-title mb-0">Resumen Financiero - {mesActual}</h5>
+                <h5 className="card-title mb-0">Resumen Financiero</h5>
               </div>
               <div className="card-body">
                 <div className="row">
                   <div className="col-md-6 col-lg-3 mb-4">
                     <div className="card h-100 border-primary">
                       <div className="card-body text-center">
-                        <h6 className="text-primary">Total Estimado</h6>
+                        <h6 className="text-primary">Total Cobrar</h6>
                         <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.totalEstimadoMes)}</h3>
                         <p className="text-muted small">Valor estimado a cobrar</p>
                       </div>
@@ -282,9 +286,9 @@ const Home = () => {
                   <div className="col-md-6 col-lg-3 mb-4">
                     <div className="card h-100 border-info">
                       <div className="card-body text-center">
-                        <h6 className="text-info">Total Cobrado</h6>
+                        <h6 className="text-info">Monto Extra</h6>
                         <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.totalRealMes)}</h3>
-                        <p className="text-muted small">Valor real cobrado</p>
+                        <p className="text-muted small">Monto extra recibido</p>
                       </div>
                     </div>
                   </div>
@@ -292,7 +296,7 @@ const Home = () => {
                   <div className="col-md-6 col-lg-3 mb-4">
                     <div className="card h-100 border-success">
                       <div className="card-body text-center">
-                        <h6 className="text-success">Pagado</h6>
+                        <h6 className="text-success">Total Pagado</h6>
                         <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.pagadoMes)}</h3>
                         <p className="text-muted small">Monto recibido</p>
                       </div>
@@ -302,9 +306,9 @@ const Home = () => {
                   <div className="col-md-6 col-lg-3 mb-4">
                     <div className="card h-100 border-danger">
                       <div className="card-body text-center">
-                        <h6 className="text-danger">Deuda Pendiente</h6>
+                        <h6 className="text-danger">Pendiente por Cobrar</h6>
                         <h3 className="fw-bold">${formatNumber(resumenSuperAdmin.deudaMes)}</h3>
-                        <p className="text-muted small">Por cobrar</p>
+                        <p className="text-muted small">Diferencia por cobrar</p>
                       </div>
                     </div>
                   </div>
@@ -319,16 +323,16 @@ const Home = () => {
                       <div className="row">
                         <div className="col-md-6">
                           <div className="d-flex justify-content-between mb-2">
-                            <span>Estimado vs Real:</span>
-                            <strong className={parseFloat(resumenSuperAdmin.totalRealMes) >= parseFloat(resumenSuperAdmin.totalEstimadoMes) ? "text-success" : "text-danger"}>
-                              {((parseFloat(resumenSuperAdmin.totalRealMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100).toFixed(2))}%
+                            <span>Estimado vs Pagado:</span>
+                            <strong className={parseFloat(resumenSuperAdmin.pagadoMes) >= parseFloat(resumenSuperAdmin.totalEstimadoMes) ? "text-success" : "text-danger"}>
+                              {((parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100).toFixed(2))}%
                             </strong>
                           </div>
                           <div className="progress mb-4" style={{height: "10px"}}>
                             <div 
                               className="progress-bar bg-primary" 
                               role="progressbar" 
-                              style={{width: `${Math.min(100, (parseFloat(resumenSuperAdmin.totalRealMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100))}%`}} 
+                              style={{width: `${Math.min(100, (parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100))}%`}} 
                             />
                           </div>
                         </div>
@@ -336,15 +340,15 @@ const Home = () => {
                         <div className="col-md-6">
                           <div className="d-flex justify-content-between mb-2">
                             <span>Porcentaje de cobranza:</span>
-                            <strong className={parseFloat(resumenSuperAdmin.pagadoMes) >= parseFloat(resumenSuperAdmin.totalRealMes) * 0.8 ? "text-success" : "text-warning"}>
-                              {((parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalRealMes) || 1) * 100).toFixed(2))}%
+                            <strong className={parseFloat(resumenSuperAdmin.pagadoMes) >= parseFloat(resumenSuperAdmin.totalEstimadoMes) * 0.8 ? "text-success" : "text-warning"}>
+                              {((parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100).toFixed(2))}%
                             </strong>
                           </div>
                           <div className="progress mb-4" style={{height: "10px"}}>
                             <div 
                               className="progress-bar bg-success" 
                               role="progressbar" 
-                              style={{width: `${Math.min(100, (parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalRealMes) || 1) * 100))}%`}} 
+                              style={{width: `${Math.min(100, (parseFloat(resumenSuperAdmin.pagadoMes) / (parseFloat(resumenSuperAdmin.totalEstimadoMes) || 1) * 100))}%`}} 
                             />
                           </div>
                         </div>
