@@ -246,6 +246,16 @@ const PagosClientesSuperAdmin = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
+      await axios.post(
+        'https://sistemacontable-wico.onrender.com/api/historial_pago/',
+        {
+          cliente: clienteId,
+          monto: parseFloat(monto),
+          fecha_pago: fecha
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
       // Actualizar datos
       const [montosExtraResponse, fondosResponse] = await Promise.all([
         axios.get('https://sistemacontable-wico.onrender.com/api/listar_monto_extra/', {
