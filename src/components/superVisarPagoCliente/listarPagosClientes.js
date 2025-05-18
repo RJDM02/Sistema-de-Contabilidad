@@ -396,9 +396,9 @@ const PagosClientesSuperAdmin = () => {
           <h3 className="m-0">Pagos de Clientes</h3>
           <div>
             <span className="badge bg-info me-2">Clientes: {clientesProcesados.length}</span>
-            <span className="badge bg-warning me-2">Estimado: ${totals.estimado.toFixed(2)}</span>
+            <span className="badge bg-warning me-2">A Cobrar: ${totals.estimado.toFixed(2)}</span>
             <span className={`badge ${totals.saldo > 0 ? 'bg-danger' : 'bg-success'}`}>
-              Saldo: ${totals.saldo.toFixed(2)}
+              Deuda: ${totals.saldo.toFixed(2)}
             </span>
             <span className="badge bg-success">Pagado: ${totals.pagado.toFixed(2)}</span>
           </div>
@@ -410,9 +410,9 @@ const PagosClientesSuperAdmin = () => {
                 <tr>
                   <th>#</th>
                   <th>Cliente</th>
-                  <th className="text-end">Estimado</th>
+                  <th className="text-end">A Cobrar</th>
                   <th>Estado</th>
-                  <th className="text-end">Saldo</th>
+                  <th className="text-end">Deuda</th>
                   <th className="text-end">Pagado</th>
                 </tr>
               </thead>
@@ -491,9 +491,9 @@ const PagosClientesSuperAdmin = () => {
               <span className="badge bg-light text-dark border">Ajuste</span>
             </div>
             <div className="col-md-8 text-md-end">
-              <strong className="me-3">Total estimado: ${totals.estimado.toFixed(2)}</strong>
+              <strong className="me-3">Total Cobrar: ${totals.estimado.toFixed(2)}</strong>
               <strong className={`me-3 ${totals.saldo > 0 ? 'text-danger' : 'text-success'}`}>
-                Saldo neto: ${totals.saldo.toFixed(2)}
+                Deuda: ${totals.saldo.toFixed(2)}
               </strong>
               <strong className="text-success">Pagado: ${totals.pagado.toFixed(2)}</strong>
             </div>
