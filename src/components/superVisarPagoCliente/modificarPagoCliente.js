@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Table, Button, Card, Badge, Form } from 'react-bootstrap';
+import { Table, Button, Form, InputGroup } from 'react-bootstrap';
+import { FaSearch, FaCalendarAlt } from 'react-icons/fa';
 
-const ModificarPagosClientes = () => {
+const ModificarPagoCliente = () => {
   const [clientes, setClientes] = useState([]);
   const [pagos, setPagos] = useState([]);
   const [expandedRows, setExpandedRows] = useState([]);
@@ -11,6 +12,11 @@ const ModificarPagosClientes = () => {
   const [totals, setTotals] = useState({
     total: 0,
     clientes: 0
+  });
+  const [filters, setFilters] = useState({
+    nombre: '',
+    fechaDesde: '',
+    fechaHasta: ''
   });
 
   useEffect(() => {
@@ -34,7 +40,12 @@ const ModificarPagosClientes = () => {
           }
         );
         
-        setClientes(clientesResponse.data);
+        // Ordenar clientes alfabéticamente
+        const clientesOrdenados = [...clientesResponse.data].sort((a, b) => 
+          a.nombre.localeCompare(b.nombre)
+        );
+        
+        setClientes(clientesOrdenados);
         setPagos(pagosResponse.data);
         
         // Calcular totales
@@ -54,14 +65,38 @@ const ModificarPagosClientes = () => {
     fetchData();
   }, []);
 
-  // Agrupar pagos por cliente
-  const pagosPorCliente = pagos.reduce((acc, pago) => {
-    if (!acc[pago.cliente_id]) {
-      acc[pago.cliente_id] = [];
-    }
-    acc[pago.cliente_id].push(pago);
-    return acc;
-  }, {});
+  // Agrupar y filtrar pagos por cliente
+  const getPagosFiltrados = () => {
+    const pagosPorCliente = {};
+    
+    // Primero filtramos los pagos según los criterios
+    const pagosFiltrados = pagos.filter(pago => {
+      const fechaPago = new Date(pago.fecha);
+      const desde = filters.fechaDesde ? new Date(filters.fechaDesde) : null;
+      const hasta = filters.fechaHasta ? new Date(filters.fechaHasta) : null;
+      
+      const cumpleFecha = (
+        (!desde || fechaPago >= desde) && 
+        (!hasta || fechaPago <= hasta)
+      );
+      
+      const cliente = clientes.find(c => c.id === pago.cliente_id);
+      const nombreCliente = cliente ? cliente.nombre.toLowerCase() : '';
+      const cumpleNombre = nombreCliente.includes(filters.nombre.toLowerCase());
+      
+      return cumpleFecha && cumpleNombre;
+    });
+    
+    // Luego agrupamos
+    pagosFiltrados.forEach(pago => {
+      if (!pagosPorCliente[pago.cliente_id]) {
+        pagosPorCliente[pago.cliente_id] = [];
+      }
+      pagosPorCliente[pago.cliente_id].push(pago);
+    });
+    
+    return pagosPorCliente;
+  };
 
   // Función para alternar la expansión de filas
   const toggleRow = (clienteId) => {
@@ -75,6 +110,22 @@ const ModificarPagosClientes = () => {
     }
     
     setExpandedRows(newExpandedRows);
+  };
+
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      nombre: '',
+      fechaDesde: '',
+      fechaHasta: ''
+    });
   };
 
   if (loading) return (
@@ -95,16 +146,86 @@ const ModificarPagosClientes = () => {
     </div>
   );
 
+  const pagosPorCliente = getPagosFiltrados();
+  const clientesConPagos = clientes.filter(cliente => 
+    pagosPorCliente[cliente.id]?.length > 0 || filters.nombre === ''
+  );
+
   return (
     <div className="container-fluid mt-3">
       <div className="card shadow">
         <div className="card-header bg-dark text-white d-flex justify-content-between align-items-center">
           <h3 className="m-0">Historial de Pagos</h3>
           <div>
-            <span className="badge bg-info me-2">Clientes: {totals.clientes}</span>
-            <span className="badge bg-success">Total Pagado: ${totals.total.toFixed(2)}</span>
+            <span className="badge bg-info me-2">Clientes: {clientesConPagos.length}</span>
+            <span className="badge bg-success">
+              Total Pagado: ${Object.values(pagosPorCliente).reduce((sum, pagos) => 
+                sum + pagos.reduce((sumPago, pago) => sumPago + pago.monto, 0), 0).toFixed(2)}
+            </span>
           </div>
         </div>
+        
+        {/* Filtros */}
+        <div className="card-body border-bottom">
+          <div className="row g-3">
+            <div className="col-md-4">
+              <InputGroup>
+                <InputGroup.Text>
+                  <FaSearch />
+                </InputGroup.Text>
+                <Form.Control
+                  type="text"
+                  name="nombre"
+                  placeholder="Filtrar por nombre"
+                  value={filters.nombre}
+                  onChange={handleFilterChange}
+                />
+              </InputGroup>
+            </div>
+            
+            <div className="col-md-3">
+              <InputGroup>
+                <InputGroup.Text>
+                  <FaCalendarAlt />
+                </InputGroup.Text>
+                <Form.Control
+                  type="date"
+                  name="fechaDesde"
+                  placeholder="Desde"
+                  value={filters.fechaDesde}
+                  onChange={handleFilterChange}
+                />
+              </InputGroup>
+            </div>
+            
+            <div className="col-md-3">
+              <InputGroup>
+                <InputGroup.Text>
+                  <FaCalendarAlt />
+                </InputGroup.Text>
+                <Form.Control
+                  type="date"
+                  name="fechaHasta"
+                  placeholder="Hasta"
+                  value={filters.fechaHasta}
+                  onChange={handleFilterChange}
+                  min={filters.fechaDesde}
+                />
+              </InputGroup>
+            </div>
+            
+            <div className="col-md-2">
+              <Button 
+                variant="outline-secondary" 
+                onClick={resetFilters}
+                className="w-100"
+              >
+                Limpiar filtros
+              </Button>
+            </div>
+          </div>
+        </div>
+        
         <div className="card-body p-0">
           <div className="table-responsive">
             <Table bordered hover className="mb-0">
@@ -118,7 +239,7 @@ const ModificarPagosClientes = () => {
                 </tr>
               </thead>
               <tbody>
-                {clientes.map((cliente, index) => {
+                {clientesConPagos.map((cliente, index) => {
                   const clientePagos = pagosPorCliente[cliente.id] || [];
                   const montoTotal = clientePagos.reduce((sum, pago) => sum + pago.monto, 0);
                   const ultimoPago = clientePagos.length > 0 
@@ -126,6 +247,11 @@ const ModificarPagosClientes = () => {
                     : null;
                   const tienePagos = clientePagos.length > 0;
                   const estado = tienePagos ? 'Con pagos' : 'Sin pagos';
+                  
+                  // Si hay filtro de nombre y no coincide, no mostrar
+                  if (filters.nombre && !cliente.nombre.toLowerCase().includes(filters.nombre.toLowerCase())) {
+                    return null;
+                  }
                   
                   return (
                     <React.Fragment key={cliente.id}>
@@ -165,6 +291,16 @@ const ModificarPagosClientes = () => {
                     </React.Fragment>
                   );
                 })}
+                
+                {clientesConPagos.length === 0 && (
+                  <tr>
+                    <td colSpan="5" className="text-center py-4">
+                      {filters.nombre || filters.fechaDesde || filters.fechaHasta 
+                        ? "No se encontraron resultados con los filtros aplicados"
+                        : "No hay datos de pagos registrados"}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </Table>
           </div>
@@ -176,7 +312,10 @@ const ModificarPagosClientes = () => {
               <span className="badge bg-info">Detalle pago</span>
             </div>
             <div className="col-md-8 text-md-end">
-              <strong className="text-success">Total Pagado: ${totals.total.toFixed(2)}</strong>
+              <strong className="text-success">
+                Total Pagado: ${Object.values(pagosPorCliente).reduce((sum, pagos) => 
+                  sum + pagos.reduce((sumPago, pago) => sumPago + pago.monto, 0), 0).toFixed(2)}
+              </strong>
             </div>
           </div>
         </div>
@@ -185,4 +324,4 @@ const ModificarPagosClientes = () => {
   );
 };
 
-export default ModificarPagosClientes;
+export default ModificarPagoCliente;
