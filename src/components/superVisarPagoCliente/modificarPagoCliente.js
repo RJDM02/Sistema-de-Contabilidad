@@ -328,7 +328,7 @@ const ModificarPagoCliente = () => {
                             {estado}
                           </span>
                         </td>
-                        <td></td>
+                        {/* <td></td> */}
                       </tr>
                       
                       {expandedRows.includes(cliente.id) && clientePagos.map((pago, pagoIndex) => (
