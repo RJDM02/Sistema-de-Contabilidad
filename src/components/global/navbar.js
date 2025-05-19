@@ -112,13 +112,13 @@ const Navbar = () => {
     }
 
     // Monto Extra - solo si NO estamos en esa ruta
-    if (!currentPath.startsWith("/monto_extra")) {
-      additionalItems.push({
-        path: "/monto_extra",
-        icon: "bi-cash-stack",
-        label: "Monto Extra"
-      });
-    }
+    // if (!currentPath.startsWith("/monto_extra")) {
+     // additionalItems.push({
+        // path: "/monto_extra",
+        // icon: "bi-cash-stack",
+        // label: "Monto Extra"
+      // });
+    // }
 
     // Comparativa - solo si NO estamos en esa ruta
     if ((userRole === "SuperAdmin" || userRole === "Admin") && 
