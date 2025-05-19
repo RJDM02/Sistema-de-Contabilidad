@@ -72,7 +72,7 @@ const ModificarPagoCliente = () => {
     try {
       const token = localStorage.getItem("auth");
       await axios.delete(
-        `https://sistemacontable-wico.onrender.com/api/api/eliminar_historial_pago/${pagoToDelete}/`,
+        `https://sistemacontable-wico.onrender.com/api/eliminar_historial_pago/${pagoToDelete}/`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
