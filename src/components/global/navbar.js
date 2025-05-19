@@ -9,7 +9,9 @@ const Navbar = () => {
   const [userRole, setUserRole] = useState(null);
   const [userName, setUserName] = useState("Usuario");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const dropdownRef = useRef(null);
+  const moreMenuRef = useRef(null);
 
   useEffect(() => {
     // Get user role from token in localStorage
@@ -34,6 +36,9 @@ const Navbar = () => {
     if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
       setShowDropdown(false);
     }
+    if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
+      setShowMoreMenu(false);
+    }
   };
 
   const isActive = (path) => location.pathname.startsWith(path);
@@ -46,6 +51,12 @@ const Navbar = () => {
 
   const toggleDropdown = () => {
     setShowDropdown(!showDropdown);
+    setShowMoreMenu(false);
+  };
+
+  const toggleMoreMenu = () => {
+    setShowMoreMenu(!showMoreMenu);
+    setShowDropdown(false);
   };
 
   const toggleMobileMenu = () => {
@@ -57,128 +68,119 @@ const Navbar = () => {
     const items = [];
     
     // Home link for all users
-    if (!isActive("/home")) {
+    items.push({
+      path: "/home",
+      icon: "bi-house-door",
+      label: "Home"
+    });
+
+    // COBROS - Para todos los usuarios
+    if (userRole === "Admin" || userRole === "user_User" || userRole === "user_Supervisor" || userRole === "user_Supervisado") {
       items.push({
-        path: "/home",
-        icon: "bi-house-door",
-        label: "Home"
+        path: "/gestCobro/listarCobros",
+        icon: "bi-cash-coin",
+        label: "Cobros"
       });
     }
 
-    //Esto es a futuro porque predigo que va a pasar 
-    items.push({
-        path: "/monto_extra",
-        icon: "bi-cash-stack",
-        label: "Monto_extra"
-    });
-
-    // COBROS - Primero para todos los usuarios
-    if (userRole === "Admin" || userRole === "user_User" || userRole === "user_Supervisor" || userRole === "user_Supervisado") {
-      if (!isActive("/gestCobro")) {
-        items.push({
-          path: "/gestCobro/listarCobros",
-          icon: "bi-cash-coin",
-          label: "Cobros"
-        });
-      }
-    }
-
-    // COBROS - Vista especial para SuperAdmin (también aparece como "Cobros")
+    // COBROS - Vista especial para SuperAdmin
     if (userRole === "SuperAdmin") {
-      // Mostrar ambos items siempre para SuperAdmin
       items.push({
         path: "/superVisarPagoCliente/listarPagosClientes",
         icon: "bi-cash-stack",
         label: "Cobros"
       });
-      
-      items.push({
+    }
+
+    // Elementos prioritarios (mostrados directamente en la barra)
+    const priorityItems = items.slice(0, 2); // Los 2 primeros elementos siempre visibles
+
+    // Elementos adicionales (mostrados en el menú "Más")
+    const additionalItems = [];
+    
+    // Historial de Cobros - Solo SuperAdmin
+    if (userRole === "SuperAdmin") {
+      additionalItems.push({
         path: "/superVisarPagoCliente/modificarPagoCliente",
         icon: "bi-clock-history",
         label: "Historial de Cobros"
       });
     }
 
+    // Monto Extra
+    additionalItems.push({
+      path: "/monto_extra",
+      icon: "bi-cash-stack",
+      label: "Monto Extra"
+    });
+
     // Comparativa - para SuperAdmin o Admin
     if (userRole === "SuperAdmin" || userRole === "Admin") {
-        items.push({
-          path: "/superVisarPagoCliente/comparativaTotalCobrar",
-          icon: "bi-credit-card",
-          label: "Comparativa"
-        });
+      additionalItems.push({
+        path: "/superVisarPagoCliente/comparativaTotalCobrar",
+        icon: "bi-bar-chart",
+        label: "Comparativa"
+      });
     }
 
     // PAGOS - para SuperAdmin o Admin
     if (userRole === "SuperAdmin" || userRole === "Admin") {
-      if (!isActive("/gestPago")) {
-        items.push({
-          path: "/gestPago/listarPagosCobros",
-          icon: "bi-credit-card",
-          label: "Pagos"
-        });
-      }
+      additionalItems.push({
+        path: "/gestPago/listarPagosCobros",
+        icon: "bi-credit-card",
+        label: "Pagos"
+      });
     }
-    
 
     // TRABAJADORES - para SuperAdmin o Admin
     if (userRole === "SuperAdmin" || userRole === "Admin") {
-      if (!isActive("/gestTrabajador")) {
-        items.push({
-          path: "/gestTrabajador/listaTrabajadores",
-          icon: "bi-person-badge",
-          label: "Trabajadores"
-        });
-      }
+      additionalItems.push({
+        path: "/gestTrabajador/listaTrabajadores",
+        icon: "bi-person-badge",
+        label: "Trabajadores"
+      });
     }
 
     // ROL - Solo SuperAdmin
     if (userRole === "SuperAdmin") {
-      if (!isActive("/gestRol")) {
-        items.push({
-          path: "/gestRol/listaUsuarios",
-          icon: "bi-people",
-          label: "Rol"
-        });
-      }
+      additionalItems.push({
+        path: "/gestRol/listaUsuarios",
+        icon: "bi-people",
+        label: "Rol"
+      });
     }
 
     // CLIENTES - para SuperAdmin o Admin
     if (userRole === "SuperAdmin" || userRole === "Admin") {
-      if (!isActive("/gestCliente")) {
-        items.push({
-          path: "/gestCliente/listarClientes",
-          icon: "bi-person-lines-fill",
-          label: "Clientes"
-        });
-      }
+      additionalItems.push({
+        path: "/gestCliente/listarClientes",
+        icon: "bi-person-lines-fill",
+        label: "Clientes"
+      });
     }
 
     // AGENCIAS - para SuperAdmin o Admin
     if (userRole === "SuperAdmin" || userRole === "Admin") {
-      if (!isActive("/gestAgencia")) {
-        items.push({
-          path: "/gestAgencia/listarAgencias",
-          icon: "bi-building",
-          label: "Agencias"
-        });
-      }
+      additionalItems.push({
+        path: "/gestAgencia/listarAgencias",
+        icon: "bi-building",
+        label: "Agencias"
+      });
     }
 
     // DOCUMENTACIÓN - para SuperAdmin o Admin
     if (userRole === "SuperAdmin" || userRole === "Admin") {
-      if (!isActive("/gestDocumentacion")) {
-        items.push({
-          path: "/gestDocumentacion/listarDocumentacion",
-          icon: "bi-file-earmark-text",
-          label: "Documentación"
-        });
-      }
+      additionalItems.push({
+        path: "/gestDocumentacion/listarDocumentacion",
+        icon: "bi-file-earmark-text",
+        label: "Documentación"
+      });
     }
     
-    return items;
+    return { priorityItems, additionalItems };
   };
 
-  const navItems = getNavItems();
+  const { priorityItems, additionalItems } = getNavItems();
 
   const getRoleColor = () => {
     switch (userRole) {
@@ -195,20 +197,23 @@ const Navbar = () => {
     <nav className="navbar navbar-expand-lg sticky-top" style={{
       background: 'linear-gradient(to right, #2c3e50, #3a506b)',
       boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-      padding: '12px 0'
+      padding: '8px 0', // Reducido el padding para hacerla más fina
+      height: '60px' // Altura fija para la barra de navegación
     }}>
-      <div className="container">
+      <div className="container-fluid px-3"> {/* Cambiado a container-fluid para más espacio */}
         <Link 
           className="navbar-brand d-flex align-items-center" 
           to="/home" 
           style={{ 
-            fontWeight: '700', 
-            fontSize: '1.6rem',
+            fontWeight: '600', 
+            fontSize: '1.2rem', // Reducido el tamaño
             color: 'white',
-            letterSpacing: '0.5px'
+            letterSpacing: '0.5px',
+            marginRight: '8px', // Reducido el margen
+            paddingRight: '8px'
           }}
         >
-          <i className="bi bi-building me-2"></i>
+          <i className="bi bi-building me-1"></i>
           Mi App
         </Link>
 
@@ -218,27 +223,28 @@ const Navbar = () => {
           onClick={toggleMobileMenu}
           style={{
             border: '1px solid rgba(255,255,255,0.3)',
-            padding: '4px 8px'
+            padding: '2px 6px'
           }}
         >
-          <i className="bi bi-list text-white" style={{ fontSize: '1.5rem' }}></i>
+          <i className="bi bi-list text-white" style={{ fontSize: '1.2rem' }}></i>
         </button>
 
         <div className={`collapse navbar-collapse ${isMobileMenuOpen ? 'show' : ''}`}>
-          <ul className="navbar-nav ms-auto align-items-center">
-            {navItems.map((item, index) => (
+          <ul className="navbar-nav d-flex align-items-center">
+            {/* Elementos prioritarios siempre visibles */}
+            {priorityItems.map((item, index) => (
               <li className="nav-item mx-1" key={index}>
                 <Link 
                   className="nav-link d-flex align-items-center text-white" 
                   to={item.path}
                   style={{ 
-                    fontSize: '1rem', 
+                    fontSize: '0.9rem', 
                     fontWeight: '500',
-                    padding: '8px 12px',
+                    padding: '6px 10px',
                     borderRadius: '6px',
                     transition: 'all 0.2s ease',
                     opacity: '0.9',
-                    margin: '0 2px',
+                    margin: '0 1px',
                     backgroundColor: isActive(item.path) ? 'rgba(255,255,255,0.15)' : 'transparent'
                   }}
                   onMouseOver={(e) => {
@@ -254,14 +260,91 @@ const Navbar = () => {
                     }
                   }}
                 >
-                  <i className={`bi ${item.icon} me-2`}></i>
-                  {item.label}
+                  <i className={`bi ${item.icon} me-1`}></i>
+                  <span className="d-none d-sm-inline">{item.label}</span>
                 </Link>
               </li>
             ))}
 
-            {/* User Dropdown */}
-            <li className="nav-item ms-3" ref={dropdownRef}>
+            {/* Botón "Más" para elementos adicionales */}
+            {additionalItems.length > 0 && (
+              <li className="nav-item mx-1" ref={moreMenuRef}>
+                <button
+                  className="nav-link d-flex align-items-center text-white"
+                  onClick={toggleMoreMenu}
+                  style={{
+                    fontSize: '0.9rem',
+                    fontWeight: '500',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    transition: 'all 0.2s ease',
+                    opacity: '0.9',
+                    margin: '0 1px',
+                    backgroundColor: showMoreMenu ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                  onMouseOver={(e) => {
+                    if (!showMoreMenu) {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                      e.currentTarget.style.opacity = '1';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!showMoreMenu) {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.opacity = '0.9';
+                    }
+                  }}
+                >
+                  <i className="bi bi-grid-3x3-gap-fill me-1"></i>
+                  <span className="d-none d-sm-inline">Más</span>
+                  <i className={`bi bi-chevron-${showMoreMenu ? 'up' : 'down'} ms-1`} style={{ fontSize: '0.8rem' }}></i>
+                </button>
+
+                {showMoreMenu && (
+                  <div
+                    className="dropdown-menu show"
+                    style={{
+                      position: 'absolute',
+                      left: '0',
+                      marginTop: '8px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      padding: '8px 0',
+                      minWidth: '220px',
+                      backgroundColor: 'white',
+                      zIndex: 1000
+                    }}
+                  >
+                    {additionalItems.map((item, index) => (
+                      <Link
+                        key={index}
+                        className="dropdown-item d-flex align-items-center py-2"
+                        to={item.path}
+                        style={{
+                          borderRadius: '6px',
+                          margin: '2px 8px',
+                          padding: '8px 12px',
+                          transition: 'background-color 0.2s',
+                          backgroundColor: isActive(item.path) ? '#f3f4f6' : 'transparent',
+                          fontWeight: isActive(item.path) ? '500' : 'normal'
+                        }}
+                      >
+                        <i className={`bi ${item.icon} me-2`} style={{ color: '#4a5568' }}></i>
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </li>
+            )}
+          </ul>
+
+          {/* Perfil de usuario - Ahora está a la derecha */}
+          <ul className="navbar-nav ms-auto align-items-center">
+            <li className="nav-item" ref={dropdownRef}>
               <button 
                 className="btn d-flex align-items-center justify-content-center" 
                 onClick={toggleDropdown} 
@@ -269,11 +352,11 @@ const Navbar = () => {
                   borderRadius: '50%', 
                   backgroundColor: getRoleColor(),
                   border: '2px solid rgba(255,255,255,0.3)',
-                  width: '40px',
-                  height: '40px',
+                  width: '36px',
+                  height: '36px',
                   position: 'relative',
                   color: 'white',
-                  fontSize: '1.1rem',
+                  fontSize: '1rem',
                   boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
                   padding: 0
                 }}
@@ -289,7 +372,7 @@ const Navbar = () => {
                     position: 'absolute', 
                     right: '0', 
                     left: 'auto', 
-                    marginTop: '10px', 
+                    marginTop: '8px', 
                     borderRadius: '8px', 
                     border: 'none', 
                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
@@ -301,30 +384,29 @@ const Navbar = () => {
                   }}
                 >
                   {/* Profile Header */}
-                  <div className="text-center py-3" style={{ 
+                  <div className="text-center py-2" style={{ 
                     backgroundColor: getRoleColor(),
                     marginTop: '-8px',
                     marginBottom: '8px',
-                    padding: '16px 8px',
+                    padding: '12px 8px',
                     color: 'white'
                   }}>
                     <div className="d-flex align-items-center justify-content-center mb-2">
                       <div style={{ 
-                        width: '45px', 
-                        height: '45px', 
+                        width: '40px', 
+                        height: '40px', 
                         borderRadius: '50%', 
                         backgroundColor: 'rgba(255,255,255,0.2)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '1.4rem',
-                        fontWeight: '600'
+                        fontSize: '1.2rem'
                       }}>
                         <i className="bi bi-person-fill"></i> 
                       </div>
                     </div>
                     <span className="d-block" style={{ fontWeight: '600' }}>{userName}</span>
-                    {(userRole === "SuperAdmin" || userRole === "Admin") ? "Administrador" : "Usuario"}
+                    <small>{(userRole === "SuperAdmin" || userRole === "Admin") ? "Administrador" : "Usuario"}</small>
                   </div>
                   
                   {/* Menu Options */}
@@ -339,21 +421,21 @@ const Navbar = () => {
                       }}
                     >
                       <div style={{ 
-                        width: '32px', 
-                        height: '32px', 
+                        width: '28px', 
+                        height: '28px', 
                         borderRadius: '50%', 
                         backgroundColor: '#e3ecff',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginRight: '12px',
+                        marginRight: '10px',
                         color: '#3b82f6'
                       }}>
                         <i className="bi bi-key-fill"></i> 
                       </div>
                       <div>
-                        <span className="d-block" style={{ fontWeight: '500', fontSize: '0.95rem' }}>Cambiar Contraseña</span>
-                        <small className="text-muted" style={{ fontSize: '0.8rem' }}>Actualizar credenciales</small>
+                        <span className="d-block" style={{ fontWeight: '500', fontSize: '0.9rem' }}>Cambiar Contraseña</span>
+                        <small className="text-muted" style={{ fontSize: '0.75rem' }}>Actualizar credenciales</small>
                       </div>
                     </button>
                     
@@ -369,21 +451,21 @@ const Navbar = () => {
                       }}
                     >
                       <div style={{ 
-                        width: '32px', 
-                        height: '32px', 
+                        width: '28px', 
+                        height: '28px', 
                         borderRadius: '50%', 
                         backgroundColor: '#ffe5e5',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginRight: '12px',
+                        marginRight: '10px',
                         color: '#ef4444'
                       }}>
                         <i className="bi bi-door-closed-fill"></i>
                       </div>
                       <div>
-                        <span className="d-block" style={{ fontWeight: '500', fontSize: '0.95rem' }}>Cerrar Sesión</span>
-                        <small className="text-muted" style={{ fontSize: '0.8rem' }}>Salir de la aplicación</small>
+                        <span className="d-block" style={{ fontWeight: '500', fontSize: '0.9rem' }}>Cerrar Sesión</span>
+                        <small className="text-muted" style={{ fontSize: '0.75rem' }}>Salir de la aplicación</small>
                       </div>
                     </button>
                   </div>
