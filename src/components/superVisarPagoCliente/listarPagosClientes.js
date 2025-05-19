@@ -408,7 +408,7 @@ const PagosClientesSuperAdmin = () => {
             <span className="badge bg-info me-2">Clientes: {clientesProcesados.length}</span>
             <span className="badge bg-warning me-2">A Cobrar: ${totals.estimado.toFixed(2)}</span>
             <span className={`badge ${totals.saldo > 0 ? 'bg-danger' : 'bg-success'}`}>
-              Deuda: ${totals.saldo.toFixed(2)}
+              {totals.saldo < 0 ? 'Fondo' : 'Deuda'}: ${Math.abs(totals.saldo).toFixed(2)}
             </span>
             <span className="badge bg-success">Pagado: ${totals.pagado.toFixed(2)}</span>
           </div>
@@ -422,7 +422,7 @@ const PagosClientesSuperAdmin = () => {
                   <th>Cliente</th>
                   <th className="text-end">A Cobrar</th>
                   <th>Estado</th>
-                  <th className="text-end">Deuda</th>
+                  <th className="text-end">{totals.saldo < 0 ? 'Fondo' : 'Deuda'}</th>
                   <th className="text-end">Pagado</th>
                 </tr>
               </thead>
@@ -443,7 +443,7 @@ const PagosClientesSuperAdmin = () => {
                         </span>
                       </td>
                       <td className={`text-end ${cliente.saldo > 0 ? 'text-danger' : 'text-success'} fw-bold`}>
-                        ${cliente.saldo.toFixed(2)}
+                        ${Math.abs(cliente.saldo).toFixed(2)}
                       </td>
                       <td className="text-end text-success fw-bold">${cliente.totalPagado.toFixed(2)}</td>
                     </tr>
@@ -464,7 +464,7 @@ const PagosClientesSuperAdmin = () => {
                             </span>
                           </td>
                           <td className={`text-end ${documento.saldo > 0 ? 'text-danger' : 'text-success'}`}>
-                            ${documento.saldo.toFixed(2)}
+                            ${Math.abs(documento.saldo).toFixed(2)}
                           </td>
                           <td className="text-end text-success">${documento.pagado.toFixed(2)}</td>
                         </tr>
@@ -503,7 +503,7 @@ const PagosClientesSuperAdmin = () => {
             <div className="col-md-8 text-md-end">
               <strong className="me-3">Total Cobrar: ${totals.estimado.toFixed(2)}</strong>
               <strong className={`me-3 ${totals.saldo > 0 ? 'text-danger' : 'text-success'}`}>
-                Deuda: ${totals.saldo.toFixed(2)}
+                {totals.saldo < 0 ? 'Fondo' : 'Deuda'}: ${Math.abs(totals.saldo).toFixed(2)}
               </strong>
               <strong className="text-success">Pagado: ${totals.pagado.toFixed(2)}</strong>
             </div>
