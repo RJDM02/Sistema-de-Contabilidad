@@ -342,7 +342,7 @@ const ModificarPagoCliente = () => {
                           <td className="text-center">
                             <span className="badge bg-info">Registrado</span>
                           </td>
-                          <td className="text-center">
+                          {/* <td className="text-center"> 
                             <Button 
                               variant="outline-danger" 
                               size="sm"
@@ -354,7 +354,7 @@ const ModificarPagoCliente = () => {
                             >
                               <FaTrash />
                             </Button>
-                          </td>
+                          </td>*/}
                         </tr>
                       ))}
                     </React.Fragment>
