@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Table, Card, Spinner, Alert, Button, Modal } from 'react-bootstrap';
+import { Table, Card, Spinner, Alert, Button, Modal, Form } from 'react-bootstrap';
 
 const MontosExtra = () => {
   const [montosExtra, setMontosExtra] = useState([]);
@@ -10,6 +10,10 @@ const MontosExtra = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [montoToDelete, setMontoToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [montoToEdit, setMontoToEdit] = useState(null);
+  const [newMontoValue, setNewMontoValue] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -63,9 +67,48 @@ const MontosExtra = () => {
     }
   };
 
+  const handleEditClick = (monto) => {
+    setMontoToEdit(monto);
+    setNewMontoValue(monto.monto);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateMonto = async () => {
+    try {
+      setEditLoading(true);
+      const token = localStorage.getItem("auth");
+      
+      await axios.put(
+        `https://sistemacontable-wico.onrender.com/api/actualizar_monto_extra/${montoToEdit.id}/`,
+        { monto: newMontoValue },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      // Actualizar el estado local
+      setMontosExtra(montosExtra.map(monto => 
+        monto.id === montoToEdit.id ? { ...monto, monto: newMontoValue } : monto
+      ));
+      
+      setShowEditModal(false);
+    } catch (error) {
+      console.error("Error al actualizar:", error);
+      alert('Error al actualizar el monto extra');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const handleCloseConfirm = () => {
     setShowConfirm(false);
     setMontoToDelete(null);
+  };
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setMontoToEdit(null);
+    setNewMontoValue('');
   };
 
   const getNombreCliente = (clienteId) => {
@@ -97,7 +140,7 @@ const MontosExtra = () => {
 
   return (
     <div className="container-fluid py-4">
-      {/* Modal de confirmación */}
+      {/* Modal de confirmación de eliminación */}
       <Modal show={showConfirm} onHide={handleCloseConfirm}>
         <Modal.Header closeButton>
           <Modal.Title>Confirmar eliminación</Modal.Title>
@@ -124,6 +167,41 @@ const MontosExtra = () => {
         </Modal.Footer>
       </Modal>
 
+      {/* Modal para editar monto */}
+      <Modal show={showEditModal} onHide={handleCloseEditModal}>
+        <Modal.Header closeButton>
+          <Modal.Title>Editar Monto Extra</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group>
+            <Form.Label>Nuevo valor del monto</Form.Label>
+            <Form.Control
+              type="number"
+              value={newMontoValue}
+              onChange={(e) => setNewMontoValue(Number(e.target.value))}
+              placeholder="Ingrese el nuevo monto"
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCloseEditModal}>
+            Cancelar
+          </Button>
+          <Button 
+            variant="primary" 
+            onClick={handleUpdateMonto}
+            disabled={editLoading}
+          >
+            {editLoading ? (
+              <>
+                <Spinner as="span" size="sm" animation="border" role="status" />
+                {' Guardando...'}
+              </>
+            ) : 'Guardar Cambios'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
       <Card className="shadow">
         <Card.Header className="bg-dark text-white d-flex justify-content-between align-items-center">
           <h5 className="mb-0">Listado de Montos Extra</h5>
@@ -143,7 +221,6 @@ const MontosExtra = () => {
                   <th>ID</th>
                   <th>Monto</th>
                   <th>Cliente</th>
-                  <th>Fecha de Registro</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
@@ -154,22 +231,31 @@ const MontosExtra = () => {
                       <td>{monto.id}</td>
                       <td>${formatNumber(monto.monto)}</td>
                       <td>{getNombreCliente(monto.cliente)}</td>
-                      <td>{new Date(monto.fecha_registro).toLocaleDateString()}</td>
                       <td className="text-center">
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => handleDeleteClick(monto.id)}
-                          title="Eliminar monto extra"
-                        >
-                          <i className="bi bi-trash"></i> Eliminar
-                        </Button>
+                        <div className="d-flex justify-content-center gap-2">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleEditClick(monto)}
+                            title="Editar monto extra"
+                          >
+                            <i className="bi bi-pencil"></i> Editar
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => handleDeleteClick(monto.id)}
+                            title="Eliminar monto extra"
+                          >
+                            <i className="bi bi-trash"></i> Eliminar
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="5" className="text-center">No hay montos extra registrados</td>
+                    <td colSpan="4" className="text-center">No hay montos extra registrados</td>
                   </tr>
                 )}
               </tbody>
