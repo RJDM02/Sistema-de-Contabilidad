@@ -66,16 +66,20 @@ const Navbar = () => {
   // Navigation items based on role - ordered as requested
   const getNavItems = () => {
     const items = [];
+    const currentPath = location.pathname;
     
-    // Home link for all users
-    items.push({
-      path: "/home",
-      icon: "bi-house-door",
-      label: "Home"
-    });
+    // Home link solo si NO estamos en home
+    if (!currentPath.startsWith("/home")) {
+      items.push({
+        path: "/home",
+        icon: "bi-house-door",
+        label: "Home"
+      });
+    }
 
-    // COBROS - Para todos los usuarios
-    if (userRole === "Admin" || userRole === "user_User" || userRole === "user_Supervisor" || userRole === "user_Supervisado") {
+    // COBROS - Para todos los usuarios, solo si NO estamos en esa ruta
+    if ((userRole === "Admin" || userRole === "user_User" || userRole === "user_Supervisor" || userRole === "user_Supervisado") 
+        && !currentPath.startsWith("/gestCobro/listarCobros")) {
       items.push({
         path: "/gestCobro/listarCobros",
         icon: "bi-cash-coin",
@@ -83,8 +87,8 @@ const Navbar = () => {
       });
     }
 
-    // COBROS - Vista especial para SuperAdmin
-    if (userRole === "SuperAdmin") {
+    // COBROS - Vista especial para SuperAdmin, solo si NO estamos en esa ruta
+    if (userRole === "SuperAdmin" && !currentPath.startsWith("/superVisarPagoCliente/listarPagosClientes")) {
       items.push({
         path: "/superVisarPagoCliente/listarPagosClientes",
         icon: "bi-cash-stack",
@@ -98,8 +102,8 @@ const Navbar = () => {
     // Elementos adicionales (mostrados en el menú "Más")
     const additionalItems = [];
     
-    // Historial de Cobros - Solo SuperAdmin
-    if (userRole === "SuperAdmin") {
+    // Historial de Cobros - Solo SuperAdmin y si NO estamos en esa ruta
+    if (userRole === "SuperAdmin" && !currentPath.startsWith("/superVisarPagoCliente/modificarPagoCliente")) {
       additionalItems.push({
         path: "/superVisarPagoCliente/modificarPagoCliente",
         icon: "bi-clock-history",
@@ -107,15 +111,18 @@ const Navbar = () => {
       });
     }
 
-    // Monto Extra
-    additionalItems.push({
-      path: "/monto_extra",
-      icon: "bi-cash-stack",
-      label: "Monto Extra"
-    });
+    // Monto Extra - solo si NO estamos en esa ruta
+    if (!currentPath.startsWith("/monto_extra")) {
+      additionalItems.push({
+        path: "/monto_extra",
+        icon: "bi-cash-stack",
+        label: "Monto Extra"
+      });
+    }
 
-    // Comparativa - para SuperAdmin o Admin
-    if (userRole === "SuperAdmin" || userRole === "Admin") {
+    // Comparativa - solo si NO estamos en esa ruta
+    if ((userRole === "SuperAdmin" || userRole === "Admin") && 
+        !currentPath.startsWith("/superVisarPagoCliente/comparativaTotalCobrar")) {
       additionalItems.push({
         path: "/superVisarPagoCliente/comparativaTotalCobrar",
         icon: "bi-bar-chart",
@@ -123,8 +130,9 @@ const Navbar = () => {
       });
     }
 
-    // PAGOS - para SuperAdmin o Admin
-    if (userRole === "SuperAdmin" || userRole === "Admin") {
+    // PAGOS - solo si NO estamos en esa ruta
+    if ((userRole === "SuperAdmin" || userRole === "Admin") && 
+        !currentPath.startsWith("/gestPago/listarPagosCobros")) {
       additionalItems.push({
         path: "/gestPago/listarPagosCobros",
         icon: "bi-credit-card",
@@ -132,8 +140,9 @@ const Navbar = () => {
       });
     }
 
-    // TRABAJADORES - para SuperAdmin o Admin
-    if (userRole === "SuperAdmin" || userRole === "Admin") {
+    // TRABAJADORES - solo si NO estamos en esa ruta
+    if ((userRole === "SuperAdmin" || userRole === "Admin") && 
+        !currentPath.startsWith("/gestTrabajador/listaTrabajadores")) {
       additionalItems.push({
         path: "/gestTrabajador/listaTrabajadores",
         icon: "bi-person-badge",
@@ -141,8 +150,8 @@ const Navbar = () => {
       });
     }
 
-    // ROL - Solo SuperAdmin
-    if (userRole === "SuperAdmin") {
+    // ROL - Solo SuperAdmin y si NO estamos en esa ruta
+    if (userRole === "SuperAdmin" && !currentPath.startsWith("/gestRol/listaUsuarios")) {
       additionalItems.push({
         path: "/gestRol/listaUsuarios",
         icon: "bi-people",
@@ -150,8 +159,9 @@ const Navbar = () => {
       });
     }
 
-    // CLIENTES - para SuperAdmin o Admin
-    if (userRole === "SuperAdmin" || userRole === "Admin") {
+    // CLIENTES - solo si NO estamos en esa ruta
+    if ((userRole === "SuperAdmin" || userRole === "Admin") && 
+        !currentPath.startsWith("/gestCliente/listarClientes")) {
       additionalItems.push({
         path: "/gestCliente/listarClientes",
         icon: "bi-person-lines-fill",
@@ -159,8 +169,9 @@ const Navbar = () => {
       });
     }
 
-    // AGENCIAS - para SuperAdmin o Admin
-    if (userRole === "SuperAdmin" || userRole === "Admin") {
+    // AGENCIAS - solo si NO estamos en esa ruta
+    if ((userRole === "SuperAdmin" || userRole === "Admin") && 
+        !currentPath.startsWith("/gestAgencia/listarAgencias")) {
       additionalItems.push({
         path: "/gestAgencia/listarAgencias",
         icon: "bi-building",
@@ -168,8 +179,9 @@ const Navbar = () => {
       });
     }
 
-    // DOCUMENTACIÓN - para SuperAdmin o Admin
-    if (userRole === "SuperAdmin" || userRole === "Admin") {
+    // DOCUMENTACIÓN - solo si NO estamos en esa ruta
+    if ((userRole === "SuperAdmin" || userRole === "Admin") && 
+        !currentPath.startsWith("/gestDocumentacion/listarDocumentacion")) {
       additionalItems.push({
         path: "/gestDocumentacion/listarDocumentacion",
         icon: "bi-file-earmark-text",
@@ -197,19 +209,20 @@ const Navbar = () => {
     <nav className="navbar navbar-expand-lg sticky-top" style={{
       background: 'linear-gradient(to right, #2c3e50, #3a506b)',
       boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-      padding: '8px 0', // Reducido el padding para hacerla más fina
-      height: '60px' // Altura fija para la barra de navegación
+      padding: '8px 0',
+      height: '60px',
+      zIndex: 1030
     }}>
-      <div className="container-fluid px-3"> {/* Cambiado a container-fluid para más espacio */}
+      <div className="container-fluid px-3">
         <Link 
           className="navbar-brand d-flex align-items-center" 
           to="/home" 
           style={{ 
             fontWeight: '600', 
-            fontSize: '1.2rem', // Reducido el tamaño
+            fontSize: '1.2rem',
             color: 'white',
             letterSpacing: '0.5px',
-            marginRight: '8px', // Reducido el margen
+            marginRight: '8px',
             paddingRight: '8px'
           }}
         >
@@ -265,8 +278,11 @@ const Navbar = () => {
                 </Link>
               </li>
             ))}
+          </ul>
 
-            {/* Botón "Más" para elementos adicionales */}
+          {/* Perfil de usuario - Ahora está a la derecha */}
+          <ul className="navbar-nav ms-auto align-items-center">
+            {/* Botón "Más" - Ahora justo antes del icono de usuario */}
             {additionalItems.length > 0 && (
               <li className="nav-item mx-1" ref={moreMenuRef}>
                 <button
@@ -307,7 +323,8 @@ const Navbar = () => {
                     className="dropdown-menu show"
                     style={{
                       position: 'absolute',
-                      left: '0',
+                      right: '0',
+                      left: 'auto',
                       marginTop: '8px',
                       borderRadius: '8px',
                       border: 'none',
@@ -340,10 +357,8 @@ const Navbar = () => {
                 )}
               </li>
             )}
-          </ul>
 
-          {/* Perfil de usuario - Ahora está a la derecha */}
-          <ul className="navbar-nav ms-auto align-items-center">
+            {/* Perfil de usuario */}
             <li className="nav-item" ref={dropdownRef}>
               <button 
                 className="btn d-flex align-items-center justify-content-center" 
