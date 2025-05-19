@@ -290,7 +290,7 @@ const ModificarPagoCliente = () => {
                   <th className="text-end">Total Pagado</th>
                   <th className="text-end">Último Pago</th>
                   <th>Estado</th>
-                  <th>Acciones</th>
+                  {/* <th>Acciones</th> */}
                 </tr>
               </thead>
               <tbody>
@@ -328,7 +328,7 @@ const ModificarPagoCliente = () => {
                             {estado}
                           </span>
                         </td>
-                         <td></td> 
+                         {/* <td></td>  */}
                       </tr>
                       
                       {expandedRows.includes(cliente.id) && clientePagos.map((pago, pagoIndex) => (
@@ -342,7 +342,7 @@ const ModificarPagoCliente = () => {
                           <td className="text-center">
                             <span className="badge bg-info">Registrado</span>
                           </td>
-                           <td className="text-center"> 
+                           {/* <td className="text-center"> 
                             <Button 
                               variant="outline-danger" 
                               size="sm"
@@ -354,7 +354,7 @@ const ModificarPagoCliente = () => {
                             >
                               <FaTrash />
                             </Button>
-                          </td>
+                          </td> */}
                         </tr>
                       ))}
                     </React.Fragment>
