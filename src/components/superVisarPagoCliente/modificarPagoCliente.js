@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Table, Button, Form, InputGroup } from 'react-bootstrap';
-import { FaSearch, FaCalendarAlt } from 'react-icons/fa';
+import { Table, Button, Form, InputGroup, Modal } from 'react-bootstrap';
+import { FaSearch, FaCalendarAlt, FaTrash } from 'react-icons/fa';
 
 const ModificarPagoCliente = () => {
   const [clientes, setClientes] = useState([]);
@@ -18,6 +18,8 @@ const ModificarPagoCliente = () => {
     fechaDesde: '',
     fechaHasta: ''
   });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [pagoToDelete, setPagoToDelete] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -64,6 +66,40 @@ const ModificarPagoCliente = () => {
 
     fetchData();
   }, []);
+
+  // Función para eliminar un pago
+  const handleDeletePago = async () => {
+    try {
+      const token = localStorage.getItem("auth");
+      await axios.delete(
+        `https://sistemacontable-wico.onrender.com/api/api/eliminar_historial_pago/${pagoToDelete}/`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      
+      // Actualizar la lista de pagos
+      const updatedPagos = pagos.filter(pago => pago.id !== pagoToDelete);
+      setPagos(updatedPagos);
+      
+      // Recalcular totales
+      const totalPagado = updatedPagos.reduce((sum, pago) => sum + pago.monto, 0);
+      setTotals(prev => ({
+        ...prev,
+        total: totalPagado
+      }));
+      
+      setShowDeleteModal(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // Función para confirmar eliminación
+  const confirmDelete = (pagoId) => {
+    setPagoToDelete(pagoId);
+    setShowDeleteModal(true);
+  };
 
   // Agrupar y filtrar pagos por cliente
   const getPagosFiltrados = () => {
@@ -153,6 +189,24 @@ const ModificarPagoCliente = () => {
 
   return (
     <div className="container-fluid mt-3">
+      {/* Modal de confirmación para eliminar */}
+      <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirmar Eliminación</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          ¿Estás seguro que deseas eliminar este pago? Esta acción no se puede deshacer.
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
+            Cancelar
+          </Button>
+          <Button variant="danger" onClick={handleDeletePago}>
+            Eliminar
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
       <div className="card shadow">
         <div className="card-header bg-dark text-white d-flex justify-content-between align-items-center">
           <h3 className="m-0">Historial de Pagos</h3>
@@ -236,6 +290,7 @@ const ModificarPagoCliente = () => {
                   <th className="text-end">Total Pagado</th>
                   <th className="text-end">Último Pago</th>
                   <th>Estado</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -273,6 +328,7 @@ const ModificarPagoCliente = () => {
                             {estado}
                           </span>
                         </td>
+                        <td></td>
                       </tr>
                       
                       {expandedRows.includes(cliente.id) && clientePagos.map((pago, pagoIndex) => (
@@ -286,6 +342,19 @@ const ModificarPagoCliente = () => {
                           <td className="text-center">
                             <span className="badge bg-info">Registrado</span>
                           </td>
+                          <td className="text-center">
+                            <Button 
+                              variant="outline-danger" 
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                confirmDelete(pago.id);
+                              }}
+                              title="Eliminar este pago"
+                            >
+                              <FaTrash />
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                     </React.Fragment>
@@ -294,7 +363,7 @@ const ModificarPagoCliente = () => {
                 
                 {clientesConPagos.length === 0 && (
                   <tr>
-                    <td colSpan="5" className="text-center py-4">
+                    <td colSpan="6" className="text-center py-4">
                       {filters.nombre || filters.fechaDesde || filters.fechaHasta 
                         ? "No se encontraron resultados con los filtros aplicados"
                         : "No hay datos de pagos registrados"}
