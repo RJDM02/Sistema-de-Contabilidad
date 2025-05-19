@@ -290,7 +290,7 @@ const ModificarPagoCliente = () => {
                   <th className="text-end">Total Pagado</th>
                   <th className="text-end">Último Pago</th>
                   <th>Estado</th>
-                  <th>Acciones</th>
+                  {/* <th>Acciones</th> */}
                 </tr>
               </thead>
               <tbody>
