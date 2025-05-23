@@ -107,7 +107,7 @@ const AppRoutes = () => {
 function App() {
   return (
     <Router>
-      <InactivityDetector inactivityTime={1} warningTime={0.5}>
+      <InactivityDetector inactivityTime={30} warningTime={10}>
         <AppRoutes />
       </InactivityDetector>
     </Router>
