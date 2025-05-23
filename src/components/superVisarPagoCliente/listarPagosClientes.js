@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Modal, Button, Table, Form } from 'react-bootstrap';
+import { Modal, Button, Table, Form, InputGroup } from 'react-bootstrap';
 
 const PagosClientesSuperAdmin = () => {
   const [data, setData] = useState({
@@ -24,6 +24,10 @@ const PagosClientesSuperAdmin = () => {
     contenido: [],
     tipo: '',
     title: ''
+  });
+  const [filters, setFilters] = useState({
+    estado: 'todos',
+    nombreCliente: ''
   });
 
   useEffect(() => {
@@ -201,12 +205,26 @@ const PagosClientesSuperAdmin = () => {
       });
     });
     
-    return Array.from(clientesMap.values()).map(cliente => ({
+    // Convertir a array y aplicar filtros
+    const clientesArray = Array.from(clientesMap.values()).map(cliente => ({
       ...cliente,
       documentos: Array.from(cliente.documentos.values()).sort((a, b) => 
         (a.nombre || '').localeCompare(b.nombre || '')
       )
     })).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+    
+    // Aplicar filtros solo si hay valores en los filtros
+    return clientesArray.filter(cliente => {
+      // Filtro por nombre (si hay texto en el filtro)
+      const nombreMatch = filters.nombreCliente === '' || 
+        cliente.nombre.toLowerCase().includes(filters.nombreCliente.toLowerCase());
+      
+      // Filtro por estado (si no es 'todos')
+      const estadoMatch = filters.estado === 'todos' || 
+        cliente.estado === filters.estado;
+      
+      return nombreMatch && estadoMatch;
+    });
   };
 
   const { clientesProcesados, clientesUnicos, totals } = useMemo(() => {
@@ -229,7 +247,7 @@ const PagosClientesSuperAdmin = () => {
     }));
 
     return { clientesProcesados, clientesUnicos, totals };
-  }, [data, loading, error]);
+  }, [data, loading, error, filters]);
 
   const registrarPago = async () => {
     const { clienteId, monto, fecha } = pagoData;
@@ -283,6 +301,13 @@ const PagosClientesSuperAdmin = () => {
       console.error("Error al aplicar pago:", err);
       alert("No se pudo aplicar el pago: " + (err.response?.data?.message || err.message));
     }
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      estado: 'todos',
+      nombreCliente: ''
+    });
   };
 
   if (loading) return (
@@ -413,6 +438,48 @@ const PagosClientesSuperAdmin = () => {
             <span className="badge bg-success">Pagado: ${totals.pagado.toFixed(2)}</span>
           </div>
         </div>
+        
+        {/* Sección de Filtros */}
+        <div className="card-body p-3 bg-light">
+          <div className="row g-3 align-items-center">
+            <div className="col-md-5">
+              <InputGroup>
+                <InputGroup.Text>
+                  <i className="bi bi-search"></i>
+                </InputGroup.Text>
+                <Form.Control
+                  type="text"
+                  placeholder="Buscar por nombre de cliente..."
+                  value={filters.nombreCliente}
+                  onChange={(e) => setFilters({...filters, nombreCliente: e.target.value})}
+                />
+              </InputGroup>
+            </div>
+            <div className="col-md-4">
+              <InputGroup>
+                <InputGroup.Text>Estado</InputGroup.Text>
+                <Form.Select
+                  value={filters.estado}
+                  onChange={(e) => setFilters({...filters, estado: e.target.value})}
+                >
+                  <option value="todos">Todos los estados</option>
+                  <option value="Pendiente">Solo pendientes</option>
+                  <option value="Pagado">Solo pagados</option>
+                </Form.Select>
+              </InputGroup>
+            </div>
+            <div className="col-md-3">
+              <Button 
+                variant="outline-secondary" 
+                onClick={resetFilters}
+                disabled={filters.estado === 'todos' && filters.nombreCliente === ''}
+              >
+                Limpiar Filtros
+              </Button>
+            </div>
+          </div>
+        </div>
+
         <div className="card-body p-0">
           <div className="table-responsive">
             <Table bordered hover className="mb-0">
@@ -427,68 +494,86 @@ const PagosClientesSuperAdmin = () => {
                 </tr>
               </thead>
               <tbody>
-                {clientesProcesados.map((cliente, idxCliente) => (
-                  <React.Fragment key={`cliente-${cliente.id}`}>
-                    <tr 
-                      className={`table-primary fw-bold ${cliente.estado === 'Pendiente' ? 'table-warning' : 'table-success'}`} 
-                      onClick={() => toggleCliente(cliente.id)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <td className="text-center">{idxCliente + 1}</td>
-                      <td>{cliente.nombre}</td>
-                      <td className="text-end">${cliente.totalEstimado.toFixed(2)}</td>
-                      <td className="text-center">
-                        <span className={`badge ${cliente.estado === 'Pendiente' ? 'bg-warning' : 'bg-success'}`}>
-                          {cliente.estado}
-                        </span>
-                      </td>
-                      <td className={`text-end ${cliente.saldo > 0 ? 'text-danger' : 'text-success'} fw-bold`}>
-                        ${Math.abs(cliente.saldo).toFixed(2)}
-                      </td>
-                      <td className="text-end text-success fw-bold">${cliente.totalPagado.toFixed(2)}</td>
-                    </tr>
-                    
-                    {expandedClientes[cliente.id] && cliente.documentos.map((documento, idxDoc) => (
-                      <React.Fragment key={`doc-${documento.id}`}>
-                        <tr 
-                          className={`table-info ${documento.estado === 'Pendiente' ? 'table-warning' : 'table-success'}`} 
-                          onClick={() => toggleDocumento(documento.id)}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <td className="text-end">{idxCliente + 1}.{idxDoc + 1}</td>
-                          <td>{documento.nombre}</td>
-                          <td className="text-end">${documento.totalEstimado.toFixed(2)}</td>
-                          <td className="text-center">
-                            <span className={`badge ${documento.estado === 'Pendiente' ? 'bg-warning' : 'bg-success'}`}>
-                              {documento.estado}
-                            </span>
-                          </td>
-                          <td className={`text-end ${documento.saldo > 0 ? 'text-danger' : 'text-success'}`}>
-                            ${Math.abs(documento.saldo).toFixed(2)}
-                          </td>
-                          <td className="text-end text-success">${documento.pagado.toFixed(2)}</td>
-                        </tr>
-                        
-                        {expandedDocumentos[documento.id] && documento.tareasAjustes.map((ajuste) => {
-                          const esSuma = ajuste.cobro?.suma > 0;
-                          const unidades = esSuma ? ajuste.cobro.suma : ajuste.cobro.restar;
+                {clientesProcesados.length > 0 ? (
+                  clientesProcesados.map((cliente, idxCliente) => (
+                    <React.Fragment key={`cliente-${cliente.id}`}>
+                      <tr 
+                        className={`table-primary fw-bold ${cliente.estado === 'Pendiente' ? 'table-warning' : 'table-success'}`} 
+                        onClick={() => toggleCliente(cliente.id)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td className="text-center">{idxCliente + 1}</td>
+                        <td>{cliente.nombre}</td>
+                        <td className="text-end">Total: ${cliente.totalEstimado.toFixed(2)}</td>
+                        <td className="text-center">
+                          <span className={`badge ${cliente.estado === 'Pendiente' ? 'bg-warning' : 'bg-success'}`}>
+                            {cliente.estado}
+                          </span>
+                        </td>
+                        <td className={`text-end ${cliente.saldo > 0 ? 'text-danger' : 'text-success'} fw-bold`}>
+                          ${Math.abs(cliente.saldo).toFixed(2)}
+                        </td>
+                        <td className="text-end text-success fw-bold">${cliente.totalPagado.toFixed(2)}</td>
+                      </tr>
+                      
+                      {expandedClientes[cliente.id] && cliente.documentos.map((documento, idxDoc) => (
+                        <React.Fragment key={`doc-${documento.id}`}>
+                          <tr 
+                            className={`table-info ${documento.estado === 'Pendiente' ? 'table-warning' : 'table-success'}`} 
+                            onClick={() => toggleDocumento(documento.id)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td className="text-end">{idxCliente + 1}.{idxDoc + 1}</td>
+                            <td>{documento.nombre}</td>
+                            <td className="text-end">${documento.totalEstimado.toFixed(2)}</td>
+                            <td className="text-center">
+                              <span className={`badge ${documento.estado === 'Pendiente' ? 'bg-warning' : 'bg-success'}`}>
+                                {documento.estado}
+                              </span>
+                            </td>
+                            <td className={`text-end ${documento.saldo > 0 ? 'text-danger' : 'text-success'}`}>
+                              ${Math.abs(documento.saldo).toFixed(2)}
+                            </td>
+                            <td className="text-end text-success">${documento.pagado.toFixed(2)}</td>
+                          </tr>
                           
-                          return (
-                            <tr key={`ajuste-${ajuste.id}`} className={esSuma ? 'table-success' : 'table-danger'}>
-                              <td colSpan="2" className="text-end small">
-                                {getTipoTarea(ajuste.tipo_tarea || ajuste.cobro?.tarea)} ({esSuma ? 'Suma' : 'Resta'})
-                              </td>
-                              <td className="text-end">
-                                {esSuma ? '+' : '-'}${unidades.toFixed(2)}
-                              </td>
-                              <td colSpan="3"></td>
-                            </tr>
-                          );
-                        })}
-                      </React.Fragment>
-                    ))}
-                  </React.Fragment>
-                ))}
+                          {expandedDocumentos[documento.id] && documento.tareasAjustes.map((ajuste) => {
+                            const esSuma = ajuste.cobro?.suma > 0;
+                            const unidades = esSuma ? ajuste.cobro.suma : ajuste.cobro.restar;
+                            
+                            return (
+                              <tr key={`ajuste-${ajuste.id}`} className={esSuma ? 'table-success' : 'table-danger'}>
+                                <td colSpan="2" className="text-end small">
+                                  {getTipoTarea(ajuste.tipo_tarea || ajuste.cobro?.tarea)} ({esSuma ? 'Suma' : 'Resta'})
+                                </td>
+                                <td className="text-end">
+                                  {esSuma ? '+' : '-'}${unidades.toFixed(2)}
+                                </td>
+                                <td colSpan="3"></td>
+                              </tr>
+                            );
+                          })}
+                        </React.Fragment>
+                      ))}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="text-center py-4">
+                      {filters.estado !== 'todos' || filters.nombreCliente !== '' ? (
+                        <>
+                          <i className="bi bi-exclamation-circle fs-1 text-muted"></i>
+                          <p className="mt-2">No se encontraron clientes con los filtros aplicados</p>
+                          <Button variant="outline-primary" size="sm" onClick={resetFilters}>
+                            Limpiar filtros
+                          </Button>
+                        </>
+                      ) : (
+                        <p>No hay datos de clientes disponibles</p>
+                      )}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </Table>
           </div>
