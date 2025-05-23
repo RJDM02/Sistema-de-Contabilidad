@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './InactivityDetector.css';
 
-const InactivityDetector = ({ children, inactivityTime = 1, warningTime = 0.5 }) => {
+const InactivityDetector = ({ children, inactivityTime = 30, warningTime = 10 }) => {
   const navigate = useNavigate();
   const [remainingTime, setRemainingTime] = useState(null);
   const [isWarningVisible, setIsWarningVisible] = useState(false);
