@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import './InactivityDetector.css'; 
+import React, { useEffect, useState, useRef } from 'react';
+import './InactivityDetector.css';
 
 const InactivityDetector = ({ 
   children, 
@@ -10,57 +10,71 @@ const InactivityDetector = ({
 }) => {
   const [remainingTime, setRemainingTime] = useState(null);
   const [isWarningVisible, setIsWarningVisible] = useState(false);
+  const timers = useRef({
+    inactivityTimer: null,
+    warningTimer: null,
+    intervalTimer: null
+  });
 
   // Convertir minutos a milisegundos
   const totalInactivityMs = inactivityTime * 60 * 1000;
   const warningTimeMs = warningTime * 60 * 1000;
 
-  useEffect(() => {
-    let inactivityTimer;
-    let warningTimer;
-    let intervalTimer;
+  const startTimers = () => {
+    // Limpiar timers existentes
+    clearTimeout(timers.current.inactivityTimer);
+    clearTimeout(timers.current.warningTimer);
+    clearInterval(timers.current.intervalTimer);
+    setIsWarningVisible(false);
+    setRemainingTime(null);
 
-    const startTimers = () => {
-      // Limpiar timers existentes
-      clearTimeout(inactivityTimer);
-      clearTimeout(warningTimer);
-      clearInterval(intervalTimer);
-      setIsWarningVisible(false);
+    // Timer para mostrar advertencia
+    if (showWarning) {
+      timers.current.warningTimer = setTimeout(() => {
+        setIsWarningVisible(true);
+        startCountdown();
+      }, totalInactivityMs - warningTimeMs);
+    }
 
-      // Timer para mostrar advertencia
-      if (showWarning) {
-        warningTimer = setTimeout(() => {
-          setIsWarningVisible(true);
-          startCountdown();
-        }, totalInactivityMs - warningTimeMs);
+    // Timer para cerrar sesión
+    timers.current.inactivityTimer = setTimeout(() => {
+      onLogout();
+    }, totalInactivityMs);
+  };
+
+  const startCountdown = () => {
+    const endTime = Date.now() + warningTimeMs;
+    timers.current.intervalTimer = setInterval(() => {
+      const timeLeft = Math.round((endTime - Date.now()) / 1000);
+      setRemainingTime(timeLeft > 0 ? timeLeft : 0);
+      
+      if (timeLeft <= 0) {
+        clearInterval(timers.current.intervalTimer);
       }
+    }, 1000);
+  };
 
-      // Timer para cerrar sesión
-      inactivityTimer = setTimeout(() => {
-        onLogout();
-      }, totalInactivityMs);
-    };
+  const resetTimers = () => {
+    startTimers();
+  };
 
-    const startCountdown = () => {
-      const endTime = Date.now() + warningTimeMs;
-      intervalTimer = setInterval(() => {
-        const timeLeft = Math.round((endTime - Date.now()) / 1000);
-        setRemainingTime(timeLeft > 0 ? timeLeft : 0);
-        
-        if (timeLeft <= 0) {
-          clearInterval(intervalTimer);
-        }
-      }, 1000);
-    };
+  const handleStayLoggedIn = () => {
+    resetTimers();
+  };
 
-    const resetTimers = () => {
-      startTimers();
-    };
+  // Limpiar todos los timers
+  const clearAllTimers = () => {
+    clearTimeout(timers.current.inactivityTimer);
+    clearTimeout(timers.current.warningTimer);
+    clearInterval(timers.current.intervalTimer);
+  };
 
+  useEffect(() => {
     // Eventos que indican actividad del usuario
     const events = [
       'mousedown', 'mousemove', 'keydown', 
-      'scroll', 'touchstart', 'click'
+      'scroll', 'touchstart', 'click',
+      'keypress', 'input'
     ];
 
     // Agregar listeners
@@ -73,19 +87,20 @@ const InactivityDetector = ({
 
     // Limpieza
     return () => {
-      clearTimeout(inactivityTimer);
-      clearTimeout(warningTimer);
-      clearInterval(intervalTimer);
+      clearAllTimers();
       events.forEach(event => {
         window.removeEventListener(event, resetTimers);
       });
     };
-  }, [onLogout, totalInactivityMs, warningTimeMs, showWarning]);
+  }, [onLogout]);
 
-  const handleStayLoggedIn = () => {
-    setIsWarningVisible(false);
-    setRemainingTime(null);
-  };
+  // Exportar función para limpiar timers manualmente
+  useEffect(() => {
+    window.clearInactivityTimers = clearAllTimers;
+    return () => {
+      delete window.clearInactivityTimers;
+    };
+  }, []);
 
   return (
     <>
