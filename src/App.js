@@ -1,5 +1,5 @@
 import React from "react";
-import { HashRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
+import { HashRouter as Router, Routes, Route, Navigate, useLocation, Outlet, useNavigate } from "react-router-dom";
 import RequireAuth from "./components/RequireAuth"; 
 import InactivityDetector from "./components/InactivityDetector"; // Importa el nuevo componente
 import 'bootstrap/dist/css/bootstrap.min.css';
