@@ -66,12 +66,21 @@ const Layout = () => {
 };
 
 function App() {
+  const navigate = useNavigate();
+
   const handleLogout = () => {
-    // Lógica para cerrar sesión
+    // Limpiar timers de inactividad
+    if (window.clearInactivityTimers) {
+      window.clearInactivityTimers();
+    }
+    
+    // Limpiar datos de sesión
     localStorage.removeItem("auth");
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    window.location.href = "/"; // Redirige al login
+    
+    // Redirigir al login
+    navigate("/");
   };
 
   return (
@@ -79,8 +88,8 @@ function App() {
       {/* Envuelve todo con el InactivityDetector */}
       <InactivityDetector 
         onLogout={handleLogout}
-        inactivityTime={30} // 30 minutos de inactividad
-        warningTime={5} // Muestra advertencia 5 minutos antes
+        inactivityTime={5} // 30 minutos de inactividad
+        warningTime={1} // Muestra advertencia 5 minutos antes
       >
         <Routes>
           <Route path="/" element={<Login />} />
